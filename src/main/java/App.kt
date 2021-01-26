@@ -1,11 +1,15 @@
 import com.github.javaparser.ParserConfiguration
 import com.github.javaparser.ast.CompilationUnit
 import com.github.javaparser.ast.body.MethodDeclaration
+import com.github.javaparser.ast.expr.BinaryExpr
 import com.github.javaparser.ast.expr.BooleanLiteralExpr
+import com.github.javaparser.ast.expr.MethodCallExpr
 import com.github.javaparser.ast.expr.UnaryExpr
 import com.github.javaparser.ast.stmt.*
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
+import com.github.javaparser.ast.visitor.GenericVisitorWithDefaults
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter
+import com.github.javaparser.resolution.types.ResolvedType
 import com.github.javaparser.symbolsolver.JavaSymbolSolver
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ClassLoaderTypeSolver
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver
@@ -31,19 +35,13 @@ fun main() {
     project.tryToParse()
     val projectFiles = project.compilationUnits
 
-    // Step 1. Flatten `while`, `for`, `do-while` loops into do { if(cond) {body} } {
-    for (file in projectFiles) {
-        flattenLoops(file)
-        println(file)
-    }
-
-    // Step 2. Construct intraprocedural flow graph for each method
+    // Step 1. Construct intraprocedural flow graph for each method
     val intraGraphs: MutableMap<QualifiedName, IntraGraph> = mutableMapOf()
     for (file in projectFiles) {
         buildIntraGraph(file, intraGraphs)
     }
 
-    // Step 3. Build interprocedural call graph for the project
+    // Step 2. Build interprocedural call graph for the project
     val interGraphs: MutableMap<QualifiedName, InterGraph> = mutableMapOf()
     for (file in projectFiles) {
         buildInterGraph(file, interGraphs)
@@ -59,18 +57,40 @@ typealias InterGraphSet = MutableMap<QualifiedName, InterGraph>
  * Build intra-graph for a compilation unit.
  */
 fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
+
+    val exceptionVisitor = object : GenericVisitorAdapter<List<ResolvedType>, Void>() {
+        override fun visit(binaryExpr: BinaryExpr, arg: Void?): List<ResolvedType>? {
+            val left = binaryExpr.left.accept(this, arg)
+            val right = binaryExpr.right.accept(this, arg)
+            if (left == null) return right
+            if (right == null) return left
+            return left + right
+        }
+
+        override fun visit(call: MethodCallExpr, arg: Void?): List<ResolvedType>? {
+            val args = call.arguments
+            val argExcs = args.map { it.accept(this, arg) }.filterNotNull().flatten()
+            val call = call.resolve()
+            val res = (call.specifiedExceptions + argExcs).filterNotNull()
+            if (res.isNotEmpty())
+                return res
+            return null
+        }
+    }
+
     val blockVisitor = object : GenericVisitorAdapter<IntraGraph, Void>() {
         var depth = 0
 
         override fun visit(blockStmt: BlockStmt, arg: Void?): IntraGraph {
-            println(".Find block"); depth+=1
+            println(" ".repeat(depth) + ".Find block"); depth+=1
             val g = IntraGraph()
             if (blockStmt.childNodes.size == 0) {
                 g.addEdgeFromEntryToExit()
                 return g
             }
-            val subG = blockStmt.statements.map { val g = it.accept(this, null); println("${g==null} ${it::class}");  g }
+            val subG = blockStmt.statements.map { it.accept(this, null) }
             g.sequence(subG)
+            depth-=1
             return g
         }
 
@@ -114,13 +134,62 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             val g = IntraGraph()
             g.addEdgeFromEntry(expressionStmt)
             g.addEdgeToExit(expressionStmt)
+            val exc = expressionStmt.expression.accept(exceptionVisitor, null)
+            if (exc != null) {
+                for (e in exc) {
+                    g.addEdgeToExcept(expressionStmt, Label.Raise(e, expressionStmt.expression))
+                }
+            }
+            return g
+        }
+
+        override fun visit(throwStmt: ThrowStmt, arg: Void?): IntraGraph {
+            println(" ".repeat(depth) + ".Find expr " + throwStmt)
+            val g = IntraGraph()
+            val e = throwStmt.expression
+            val ty = e.calculateResolvedType()
+            g.addEdgeFromEntry(throwStmt)
+            g.addEdgeToExcept(throwStmt, Label.Raise(ty, e))
             return g
         }
 
         override fun visit(tryStmt: TryStmt, arg: Void?): IntraGraph {
             println(" ".repeat(depth) + ".Find try")
-            println("WARNING: ignore ${tryStmt::class.toString()}")
-            return tryStmt.tryBlock.accept(this, null)
+            val g = IntraGraph()
+            val bodyG = tryStmt.tryBlock.accept(this, null)
+            g.union(bodyG, mergeExcept = false)
+            g.addEdgeId(g.getEntryId(), bodyG.getEntryId())
+            if (tryStmt.finallyBlock.isPresent) {
+                val finallyG = tryStmt.finallyBlock.get().accept(this, null)
+//                val finallyGEx = finallyG.clone()
+                val finallyGEx = tryStmt.finallyBlock.get().accept(this, null)
+                g.union(finallyG, mergeExcept = false)
+                g.union(finallyGEx, mergeExcept = false)
+                g.addEdgeId(bodyG.getExitId(), finallyG.getEntryId())
+                g.addEdgeId(finallyG.getExitId(), g.getExitId())
+                for (catch in tryStmt.catchClauses) {
+                    val catchG = catch.body.accept(this, null)
+                    val ty = catch.parameter.type.resolve()
+                    val name = catch.parameter.name
+                    g.union(catchG, mergeExcept = false)
+                    g.addEdgeId(bodyG.getExceptId(), catchG.getEntryId(), Label.Catch(name, ty))
+                    g.addEdgeId(catchG.getExceptId(), finallyGEx.getEntryId())
+                    g.addEdgeId(finallyGEx.getExitId(), g.getExceptId())
+                    g.addEdgeId(catchG.getExitId(), finallyG.getEntryId())
+                }
+            } else {
+                g.addEdgeId(bodyG.getExitId(), g.getExitId())
+                for (catch in tryStmt.catchClauses) {
+                    val catchG = catch.body.accept(this, null)
+                    val ty = catch.parameter.type.resolve()
+                    val name = catch.parameter.name
+                    g.union(catchG, mergeExcept = false)
+                    g.addEdgeId(bodyG.getExceptId(), catchG.getEntryId(), Label.Catch(name, ty))
+                    g.addEdgeId(catchG.getExceptId(), g.getExceptId())
+                    g.addEdgeId(catchG.getExitId(), g.getExitId())
+                }
+            }
+            return g
         }
 
         override fun visit(emptyStmt: EmptyStmt, arg: Void?): IntraGraph {
@@ -132,7 +201,8 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
         override fun visit(returnStmt: ReturnStmt, arg: Void?): IntraGraph {
             println(" ".repeat(depth) + ".Find return")
             val g = IntraGraph()
-            g.addEdgeId(g.getEntryId(), g.getReturnId())
+            g.addEdgeFromEntry(returnStmt)
+            g.addEdgeToReturn(returnStmt)
             return g
         }
     }

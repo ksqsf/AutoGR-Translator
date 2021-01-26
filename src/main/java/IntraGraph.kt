@@ -4,6 +4,7 @@ import com.github.javaparser.ast.expr.SimpleName
 import com.github.javaparser.ast.stmt.ExpressionStmt
 import com.github.javaparser.ast.stmt.Statement
 import com.github.javaparser.resolution.types.ResolvedType
+import javassist.expr.Expr
 import java.util.*
 
 fun quote(str: String): String {
@@ -23,11 +24,17 @@ sealed class Label {
             return quote(expr.toString())
         }
     }
-    data class Ex(val ty: ResolvedType): Label() {
+    data class Raise(val ty: ResolvedType, val expr: Expression?): Label() {
         override fun toString(): String {
-            return "ex(${quote(ty.toString())})"
+            return "ex(${quote(ty.describe())} $expr)"
         }
     }
+    data class Catch(val name: SimpleName, val ty: ResolvedType): Label() {
+        override fun toString(): String {
+            return "catch(${quote(ty.describe())} ${quote(name.toString())})"
+        }
+    }
+    object Uncaught : Label()
 }
 
 /**
@@ -101,11 +108,12 @@ class IntraGraph{
 
     fun addEdgeId(from: Int, to: Int, label: Label = Label.T) {
         if (!graph.containsKey(from))
-            graph[from] = mutableSetOf();
+            graph[from] = mutableSetOf()
         if (!rgraph.containsKey(to))
-            rgraph[to] = mutableSetOf();
+            rgraph[to] = mutableSetOf()
         graph[from]!!.add(OutEdge(to, label))
         rgraph[to]!!.add(OutEdge(from, label))
+        check()
     }
 
     ///
@@ -128,7 +136,7 @@ class IntraGraph{
     }
 
     fun addEdgeToExcept(s: Statement, label: Label = Label.T) {
-
+        addEdgeId(addNodeIfAbsent(s), exceptId, label)
     }
 
     ///
@@ -158,12 +166,13 @@ class IntraGraph{
         rgraph.remove(q)
         val s = idNode.remove(q)
         nodeId.remove(s)
+        check()
     }
 
     /**
      * Modify this graph to include rhs. The return nodes are merged.
      */
-    fun union(rhs: IntraGraph, mergeBreak: Boolean = true) {
+    fun union(rhs: IntraGraph, mergeBreak: Boolean = true, mergeExcept: Boolean = true) {
         this.graph.putAll(rhs.graph)
         this.rgraph.putAll(rhs.rgraph)
         this.nodeId.putAll(rhs.nodeId)
@@ -171,6 +180,9 @@ class IntraGraph{
         mergeId(this.returnId, rhs.returnId)
         if (mergeBreak)
             mergeId(this.breakId, rhs.breakId)
+        if (mergeExcept)
+            mergeId(this.exceptId, rhs.exceptId)
+        check()
     }
 
     /**
@@ -194,7 +206,7 @@ class IntraGraph{
             return
         }
         for (g in gs) {
-            union(g)
+            union(g, mergeBreak = true, mergeExcept = true)
         }
         addEdgeId(entryId, gs[0].entryId)
         addEdgeId(gs[0].breakId, breakId)
@@ -212,16 +224,18 @@ class IntraGraph{
         if (isSpecial(id))
             return false
         if (idNode[id] != null)
-            return false;
+            return false
         if (!rgraph.containsKey(id))
             return false
         if (graph[id] == null || rgraph[id] == null || graph[id]!!.size != 1 || rgraph[id]!!.size != 1)
             return false
-        val (_, scond) = graph[id]!!.first()
-        val (_, pcond) = rgraph[id]!!.first()
-        if (scond == Label.T && pcond == Label.T)
-            return true
-        return false
+        val (succ, scond) = graph[id]!!.first()
+        val (pred, pcond) = rgraph[id]!!.first()
+        if (scond != Label.T || pcond != Label.T)
+            return false
+//        if (graph[pred] == null || rgraph[succ] == null || graph[pred]!!.size != 1 || rgraph[succ]!!.size != 1)
+//            return false
+        return true
     }
 
     fun removeId(id: Int) {
@@ -247,6 +261,7 @@ class IntraGraph{
 
     private fun optimizeOnePass(): Boolean {
         var changed = false
+        check()
         // pred --> p --> succ
         val deleted = mutableSetOf<Int>()
         for (p in graph.keys) {
@@ -259,11 +274,16 @@ class IntraGraph{
                     deleted.add(cur)
                     cur = graph[cur]!!.first().next
                 }
-                graph[pred]!!.clear() //only p
-                rgraph[p]!!.clear() //only cur
+//                assert(graph[pred]!!.size == 1)
+//                assert(rgraph[p]!!.size == 1)
+//                graph[pred]!!.clear() //only p
+//                rgraph[p]!!.clear() //only cur
+//                println("link $pred $cur")
                 addEdgeId(pred, cur)
             }
         }
+        for (del in deleted)
+            removeId(del)
         // Remove unreachable nodes
         val vis = mutableSetOf<Int>()
         val q: Queue<Int> = LinkedList()
@@ -310,7 +330,7 @@ class IntraGraph{
      *
      * @param opt whether to optimize this graph before printing
      */
-    fun graphviz(opt: Boolean = true) {
+    fun graphviz(name: String = "G", opt: Boolean = true) {
         if (opt)
             optimize()
 
@@ -324,12 +344,10 @@ class IntraGraph{
             else "empty($id)"
         }
 
-//        assert(graph.filter { it.value.size > 0 }.size == rgraph.filter { it.value.size > 0 }.size)
-        println("digraph G {")
+        println("digraph $name {")
         for ((p, pAdj) in graph) {
             for ((q, cond) in pAdj) {
-                assert(rgraph[q]!!.contains(OutEdge(p, cond)))
-                println("\"${str(p)}\" -> \"${str(q)}\" [label=\"${quote(cond.toString())}\"];");
+                println("\"${str(p)}\" -> \"${str(q)}\" [label=\"${quote(cond.toString())}\"];")
             }
         }
         println("}")
@@ -344,6 +362,7 @@ class IntraGraph{
             else if (id == entryId) "entry"
             else if (id == exitId) "exit"
             else if (id == returnId) "return"
+            else if (id == exceptId) "except"
             else "empty($id)"
         }
 
@@ -358,17 +377,65 @@ class IntraGraph{
     }
 
     fun check() {
+        for (p in rgraph.keys) {
+            for ((q, cond) in rgraph[p]!!) {
+                assert(graph[q]!!.contains(OutEdge(p,cond)))
+            }
+        }
         for (p in graph.keys) {
             for ((q, cond) in graph[p]!!) {
-                if (q != entryId)
                 assert(rgraph[q]!!.contains(OutEdge(p,cond)))
             }
         }
-        for (p in rgraph.keys) {
-            for ((q, cond) in rgraph[p]!!) {
-                if (q != exitId)
-                    assert(graph[q]!!.contains(OutEdge(p,cond)))
+    }
+
+    fun clone(): IntraGraph {
+        val clone = IntraGraph()
+        val map: MutableMap<Int,Int> = mutableMapOf() // this id -> clone id
+        for (id in graph.keys) {
+            when (id) {
+                entryId -> {
+                    map.put(entryId, clone.entryId)
+                }
+                exitId -> {
+                    map.put(exitId, clone.exitId)
+                }
+                returnId -> {
+                    map.put(returnId, clone.returnId)
+                }
+                breakId -> {
+                    map.put(breakId, clone.breakId)
+                }
+                exceptId -> {
+                    map.put(exceptId, clone.exceptId)
+                }
+                else -> {
+                    map.put(id, newId())
+                }
             }
         }
+        // clone graph
+        for ((p,padj) in graph) {
+            clone.graph.put(map[p]!!, mutableSetOf())
+            for ((q,cond) in padj) {
+                clone.graph[map[p]!!]!!.add(OutEdge(map[q]!!, cond))
+            }
+        }
+        // clone rgraph
+        for ((p,padj) in rgraph) {
+            clone.rgraph.put(map[p]!!, mutableSetOf())
+            for ((q,cond) in padj) {
+                clone.rgraph[map[p]]!!.add(OutEdge(map[q]!!, cond))
+            }
+        }
+        // clone idNode
+        for ((id,node) in idNode) {
+            clone.idNode.put(map[id]!!, node)
+        }
+        // clone node id
+        for ((node, id) in nodeId) {
+            clone.nodeId.put(node, map[id]!!)
+        }
+        return clone
     }
 }
