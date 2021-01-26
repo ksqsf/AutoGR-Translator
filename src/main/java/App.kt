@@ -38,6 +38,7 @@ fun main() {
     // Step 1. Construct intraprocedural flow graph for each method
     val intraGraphs: MutableMap<QualifiedName, IntraGraph> = mutableMapOf()
     for (file in projectFiles) {
+        // println(file.storage.get().fileName)
         buildIntraGraph(file, intraGraphs)
     }
 
@@ -213,7 +214,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             println("Analyzing ${qname} hasBody=${decl.body.isPresent}")
             if (decl.body.isPresent){
                 val g = decl.body.get().accept(blockVisitor, null)
-                g.graphviz()
+                g.graphviz(qname.filter { it.isLetterOrDigit() }.toUpperCase())
                 gs.put(qname, g)
             }
         }

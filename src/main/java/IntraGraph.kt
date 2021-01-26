@@ -5,6 +5,7 @@ import com.github.javaparser.ast.stmt.ExpressionStmt
 import com.github.javaparser.ast.stmt.Statement
 import com.github.javaparser.resolution.types.ResolvedType
 import javassist.expr.Expr
+import java.io.File
 import java.util.*
 
 fun quote(str: String): String {
@@ -344,13 +345,23 @@ class IntraGraph{
             else "empty($id)"
         }
 
-        println("digraph $name {")
+        val f = File("/tmp/$name.dot", )
+        var text = ""
+        text += "digraph $name {"
+//        println("digraph $name {")
         for ((p, pAdj) in graph) {
             for ((q, cond) in pAdj) {
-                println("\"${str(p)}\" -> \"${str(q)}\" [label=\"${quote(cond.toString())}\"];")
+                val s = "\"${str(p)}\" -> \"${str(q)}\" [label=\"${quote(cond.toString())}\"];"
+                text += s
+//                println(s)
             }
         }
-        println("}")
+        text += "}"
+//        println("}")
+        f.writeText(text)
+        val r = Runtime.getRuntime().exec("dot -Tpng /tmp/$name.dot -O")
+        r.waitFor()
+//        println(r)
     }
 
     override fun toString(): String {
