@@ -42,10 +42,13 @@ class InterGraph {
         }
     }
 
-    fun graphviz() {
+    fun graphviz(onlyEffect: Boolean = true) {
         var s = ""
         val f = File("/tmp/INTERGRAPH.dot")
         for ((caller,callees) in graph) {
+            if (onlyEffect && !effect.contains(caller)) {
+                continue
+            }
             for (callee in callees) {
                 s += "\"${caller}\" -> \"${callee}\";";
             }
@@ -56,6 +59,5 @@ class InterGraph {
         f.writeText("digraph G {\n$s\n}\n")
         val r = Runtime.getRuntime().exec("dot -Tpng /tmp/INTERGRAPH.dot -O")
         r.waitFor()
-        println(r)
     }
 }

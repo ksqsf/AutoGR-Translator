@@ -278,6 +278,9 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
     file.accept(topVisitor, intraGraphs)
 }
 
+/**
+ * Build the inter-graph for the project.
+ */
 fun buildInterGraph(file: CompilationUnit): InterGraph {
     val fileVisitor = object : VoidVisitorAdapter<InterGraph>() {
         var currentQualifiedName: QualifiedName? = null
@@ -311,6 +314,9 @@ fun buildInterGraph(file: CompilationUnit): InterGraph {
     return g
 }
 
+/**
+ * Transform for loops into while loops.
+ */
 fun transformLoops(file: CompilationUnit) {
     file.accept(object : VoidVisitorAdapter<Void>() {
         override fun visit(forStmt: ForStmt, arg: Void?) {
