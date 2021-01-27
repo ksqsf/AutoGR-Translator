@@ -359,20 +359,16 @@ class IntraGraph{
         val f = File("/tmp/$name.dot", )
         var text = ""
         text += "digraph $name {"
-//        println("digraph $name {")
         for ((p, pAdj) in graph) {
             for ((q, cond) in pAdj) {
                 val s = "\"${str(p)}\" -> \"${str(q)}\" [label=\"${quote(cond.toString())}\"];"
                 text += s
-//                println(s)
             }
         }
         text += "}"
-//        println("}")
         f.writeText(text)
         val r = Runtime.getRuntime().exec("dot -Tpng /tmp/$name.dot -O")
         r.waitFor()
-//        println(r)
     }
 
     override fun toString(): String {
