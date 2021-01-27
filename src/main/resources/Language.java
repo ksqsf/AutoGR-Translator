@@ -11,6 +11,10 @@ public class Language {
 
     public static void dummy() {}
 
+    public static boolean dummyBool() {
+        return true;
+    }
+
     public static void raise() throws IOException {
         throw new IOException();
     }
@@ -83,14 +87,45 @@ public class Language {
     }
 
     public static void whileLoop() {
-
+        boolean a = true;
+        boolean b = false;
+        dummy();
+        while(a = b) {
+            System.out.println("Oh no");
+            if (a != true) {
+                continue;
+            } else {
+                break;
+            }
+        }
+        dummy();
     }
 
     public static void doWhileLoop() {
-
+        dummy();
+        boolean a = true, b = false;
+        String s;
+        try {
+            do {
+                dummy();
+                if (dummyBool()) {
+                    throw new Exception("oh no");
+                }
+                dummy();
+            } while (dummyBool());
+        } catch (Exception e) {
+            s = "log";
+        } finally {
+            s = "close";
+        }
+        dummy();
     }
 
     public static void forLoop() {
-
+        dummy();
+        for(int i = 1, j = 2; i < 100 || j > 1234; i++, j--) {
+            dummy();
+        }
+        dummy();
     }
 }

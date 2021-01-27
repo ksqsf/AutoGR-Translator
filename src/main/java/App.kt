@@ -16,14 +16,15 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.MemoryTypeSolver
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver
 import com.github.javaparser.utils.SourceRoot
+import net.sf.jsqlparser.statement.Block
 import java.nio.file.Path
 
 typealias QualifiedName = String
 var effectfulMethods: Set<QualifiedName> = emptySet()
 
 fun main() {
-//    val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
-    val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
+    val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
+//    val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
     val typeSolver = CombinedTypeSolver(MemoryTypeSolver(), ReflectionTypeSolver(), ClassLoaderTypeSolver(ClassLoader.getSystemClassLoader()))
     val symbolSolver = JavaSymbolSolver(typeSolver)
 
@@ -34,6 +35,12 @@ fun main() {
     project.parserConfiguration = config
     project.tryToParse()
     val projectFiles = project.compilationUnits
+
+    // Step 0. Desugar various forms of loops to simplify analysis
+    for (file in projectFiles) {
+        transformLoops(file)
+        print(file)
+    }
 
     // Step 1. Construct intraprocedural flow graph for each method
     val intraGraphs: MutableMap<QualifiedName, IntraGraph> = mutableMapOf()
@@ -95,19 +102,54 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             return g
         }
 
+        override fun visit(whileStmt: WhileStmt, arg: Void?): IntraGraph {
+            val g = IntraGraph()
+            val bodyG = whileStmt.body.accept(this, arg)
+            g.union(bodyG, mergeBreak = false, mergeContinue = false)
+            val cond = whileStmt.condition
+            if (cond == BooleanLiteralExpr(true)) {
+                g.addEdgeId(g.getEntryId(), bodyG.getEntryId())
+            } else {
+                g.addEdgeId(g.getEntryId(), bodyG.getEntryId(), Label.Br(cond))
+                g.addEdgeFromEntryToExit(Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
+            }
+            g.addEdgeId(bodyG.getExitId(), g.getEntryId())
+            g.addEdgeId(bodyG.getBreakId(), g.getExitId())
+            g.addEdgeId(bodyG.getContinueId(), g.getEntryId())
+            return g
+        }
+
         override fun visit(doStmt: DoStmt, arg: Void?): IntraGraph {
             val g = IntraGraph()
-            val inner = doStmt.body.accept(this, arg)
-            g.union(inner, false)
-            g.addEdgeId(g.getEntryId(), inner.getEntryId())
-            g.addEdgeId(g.getBreakId(), g.getExitId())
-            g.addEdgeId(inner.getExitId(), g.getExitId(), Label.Br(UnaryExpr(doStmt.condition.clone(), UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
+            val bodyG = doStmt.body.accept(this, arg)
+            g.union(bodyG, mergeBreak = false, mergeContinue = false)
+            val cond = doStmt.condition
+            g.addEdgeId(g.getEntryId(), bodyG.getEntryId())
+            if (cond == BooleanLiteralExpr(true)) {
+                g.addEdgeId(bodyG.getExitId(), g.getEntryId())
+            } else {
+                g.addEdgeId(bodyG.getExitId(), g.getEntryId(), Label.Br(cond))
+                g.addEdgeId(bodyG.getExitId(), g.getExitId(), Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
+            }
+            g.addEdgeId(bodyG.getContinueId(), bodyG.getExitId())
+            g.addEdgeId(bodyG.getBreakId(), g.getExitId())
+//            val inner = doStmt.body.accept(this, arg)
+//            g.union(inner, false)
+//            g.addEdgeId(g.getEntryId(), inner.getEntryId())
+//            g.addEdgeId(g.getBreakId(), g.getExitId())
+//            g.addEdgeId(inner.getExitId(), g.getExitId(), Label.Br(UnaryExpr(doStmt.condition.clone(), UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
             return g
         }
 
         override fun visit(breakStmt: BreakStmt, arg: Void?): IntraGraph {
             val g = IntraGraph()
             g.addEdgeId(g.getEntryId(), g.getBreakId())
+            return g
+        }
+
+        override fun visit(continueStmt: ContinueStmt, arg: Void?): IntraGraph {
+            val g = IntraGraph()
+            g.addEdgeId(g.getEntryId(), g.getContinueId())
             return g
         }
 
@@ -227,6 +269,28 @@ fun buildInterGraph(file: CompilationUnit, interGraphs: InterGraphSet) {
     val fileVisitor = object : VoidVisitorAdapter<InterGraphSet>() {
 
     }
+}
+
+fun transformLoops(file: CompilationUnit) {
+    file.accept(object : VoidVisitorAdapter<Void>() {
+        override fun visit(forStmt: ForStmt, arg: Void?) {
+            // Build while loop
+            val whileStmt = WhileStmt()
+            val whileBody = BlockStmt()
+            whileStmt.body = whileBody
+            whileStmt.condition = forStmt.compare.orElse(BooleanLiteralExpr(true)).clone()
+            whileBody.addStatement(forStmt.body)
+            forStmt.update.forEach { whileBody.addStatement(it) }
+
+            // Wrap
+            val blockStmt = BlockStmt()
+            forStmt.initialization.forEach { blockStmt.addStatement(it) }
+            blockStmt.addStatement(whileStmt)
+
+            // Replace
+            forStmt.replace(blockStmt)
+        }
+    }, null)
 }
 
 fun flattenLoops(file: CompilationUnit) {

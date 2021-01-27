@@ -49,9 +49,10 @@ sealed class Label {
  * Edges between nodes are labeled path conditions. A path condition can either be:
  * 1. T, unconditional transition, no exception
  * 2. Br, conditional transition (expression must evaluate to true), no exception
- * 3. Ex, exception, an exception on the fly
+ * 3. Ex, exception, an exception is just thrown
+ * 4. Catch, an exception is just caught here, and the exception is bound to `name` (type `ty`)
  *
- * Upon union, `return` and `except` nodes are merged.
+ * Upon union, `return` are always merged. `except` and `break` are usually, but not always, merged.
  */
 class IntraGraph{
 
@@ -66,9 +67,10 @@ class IntraGraph{
     private var returnId: Int = newId()
     private var exceptId: Int = newId()
     private var breakId: Int = newId()
+    private var continueId: Int = newId()
 
     fun isSpecial(id: Int): Boolean {
-        return id == entryId || id == exitId || id == returnId || id == exceptId || id == breakId
+        return id == entryId || id == exitId || id == returnId || id == exceptId || id == breakId || id == continueId
     }
 
     fun getEntryId(): Int {
@@ -89,6 +91,10 @@ class IntraGraph{
 
     fun getExceptId(): Int {
         return exceptId
+    }
+
+    fun getContinueId(): Int {
+        return continueId
     }
 
     private fun addNodeIfAbsent(stmt: Statement): Int {
@@ -173,7 +179,7 @@ class IntraGraph{
     /**
      * Modify this graph to include rhs. The return nodes are merged.
      */
-    fun union(rhs: IntraGraph, mergeBreak: Boolean = true, mergeExcept: Boolean = true) {
+    fun union(rhs: IntraGraph, mergeBreak: Boolean = true, mergeContinue: Boolean = true, mergeExcept: Boolean = true) {
         this.graph.putAll(rhs.graph)
         this.rgraph.putAll(rhs.rgraph)
         this.nodeId.putAll(rhs.nodeId)
@@ -183,6 +189,8 @@ class IntraGraph{
             mergeId(this.breakId, rhs.breakId)
         if (mergeExcept)
             mergeId(this.exceptId, rhs.exceptId)
+        if (mergeContinue)
+            mergeId(this.continueId, rhs.continueId)
         check()
     }
 
@@ -336,13 +344,16 @@ class IntraGraph{
             optimize()
 
         val str = { id: Int ->
-            if (idNode[id] != null) "($id)${quote(idNode[id].toString())}"
-            else if (id == entryId) "entry"
-            else if (id == exitId) "exit"
-            else if (id == returnId) "return"
-            else if (id == exceptId) "except"
-            else if (id == breakId) "break"
-            else "empty($id)"
+            when {
+                idNode[id] != null -> "($id)${quote(idNode[id].toString())}"
+                id == entryId -> "entry"
+                id == exitId -> "exit"
+                id == returnId -> "return"
+                id == exceptId -> "except"
+                id == breakId -> "break"
+                id == continueId -> "continue"
+                else -> "ε($id)"
+            }
         }
 
         val f = File("/tmp/$name.dot", )
