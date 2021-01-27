@@ -414,49 +414,30 @@ class IntraGraph{
     fun clone(): IntraGraph {
         val clone = IntraGraph()
         val map: MutableMap<Int,Int> = mutableMapOf() // this id -> clone id
-        for (id in graph.keys) {
-            when (id) {
-                entryId -> {
-                    map.put(entryId, clone.entryId)
-                }
-                exitId -> {
-                    map.put(exitId, clone.exitId)
-                }
-                returnId -> {
-                    map.put(returnId, clone.returnId)
-                }
-                breakId -> {
-                    map.put(breakId, clone.breakId)
-                }
-                exceptId -> {
-                    map.put(exceptId, clone.exceptId)
-                }
-                else -> {
-                    map.put(id, newId())
-                }
-            }
+        for (id in graph.keys + rgraph.keys) {
+            map[id] = newId()
         }
         // clone graph
-        for ((p,padj) in graph) {
-            clone.graph.put(map[p]!!, mutableSetOf())
-            for ((q,cond) in padj) {
+        for ((p,pAdj) in graph) {
+            clone.graph[map[p]!!] = mutableSetOf()
+            for ((q,cond) in pAdj) {
                 clone.graph[map[p]!!]!!.add(OutEdge(map[q]!!, cond))
             }
         }
         // clone rgraph
-        for ((p,padj) in rgraph) {
-            clone.rgraph.put(map[p]!!, mutableSetOf())
-            for ((q,cond) in padj) {
+        for ((p,pAdj) in rgraph) {
+            clone.rgraph[map[p]!!] = mutableSetOf()
+            for ((q,cond) in pAdj) {
                 clone.rgraph[map[p]]!!.add(OutEdge(map[q]!!, cond))
             }
         }
         // clone idNode
         for ((id,node) in idNode) {
-            clone.idNode.put(map[id]!!, node)
+            clone.idNode[map[id]!!] = node
         }
         // clone node id
         for ((node, id) in nodeId) {
-            clone.nodeId.put(node, map[id]!!)
+            clone.nodeId[node] = map[id]!!
         }
         return clone
     }

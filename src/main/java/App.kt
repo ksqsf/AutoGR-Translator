@@ -23,8 +23,8 @@ typealias QualifiedName = String
 var effectfulMethods: Set<QualifiedName> = emptySet()
 
 fun main() {
-    val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
-//    val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
+//    val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
+    val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
     val typeSolver = CombinedTypeSolver(MemoryTypeSolver(), ReflectionTypeSolver(), ClassLoaderTypeSolver(ClassLoader.getSystemClassLoader()))
     val symbolSolver = JavaSymbolSolver(typeSolver)
 
@@ -133,11 +133,6 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             }
             g.addEdgeId(bodyG.getContinueId(), bodyG.getExitId())
             g.addEdgeId(bodyG.getBreakId(), g.getExitId())
-//            val inner = doStmt.body.accept(this, arg)
-//            g.union(inner, false)
-//            g.addEdgeId(g.getEntryId(), inner.getEntryId())
-//            g.addEdgeId(g.getBreakId(), g.getExitId())
-//            g.addEdgeId(inner.getExitId(), g.getExitId(), Label.Br(UnaryExpr(doStmt.condition.clone(), UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
             return g
         }
 
@@ -204,8 +199,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             g.addEdgeId(g.getEntryId(), bodyG.getEntryId())
             if (tryStmt.finallyBlock.isPresent) {
                 val finallyG = tryStmt.finallyBlock.get().accept(this, null)
-//                val finallyGEx = finallyG.clone()
-                val finallyGEx = tryStmt.finallyBlock.get().accept(this, null)
+                val finallyGEx = finallyG.clone()
                 g.union(finallyG, mergeExcept = false)
                 g.union(finallyGEx, mergeExcept = false)
                 g.addEdgeId(bodyG.getExitId(), finallyG.getEntryId())
