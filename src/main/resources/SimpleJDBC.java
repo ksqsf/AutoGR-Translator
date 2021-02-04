@@ -2,7 +2,6 @@
 
 import java.io.IOException;
 import java.sql.*;
-import language.*;
 
 public class SimpleJDBC {
     // JDBC driver name and database URL
@@ -18,6 +17,7 @@ public class SimpleJDBC {
     }
 
     public static void main(String[] args) {
+        int i=0,a=0,b=0,c=0,d=0,e=0;
         if (i < 3) {
             if (i > 5) {
                 a = 4;
@@ -40,15 +40,15 @@ public class SimpleJDBC {
                     throw new IOException("bad");
                 }
                 a = 2;
-            } catch (Exception e) {
+            } catch (IOException ex) {
+                a = 1000000;
+            } catch (Exception ex) {
                 a = 3;
                 raise();
-            } catch (IOException e) {
-                a = 1000000;
             } finally {
                 a = 4;
             }
-        } catch (Exception e) {
+        } catch (Exception ex) {
             a = 321;
         }
 

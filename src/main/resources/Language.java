@@ -1,4 +1,7 @@
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import javax.sql.*;
 
@@ -20,6 +23,7 @@ public class Language {
     }
 
     public static void branch() {
+        int i=0,a,b,c,d,e;
         dummy();
         if (i < 3) {
             if (i > 5) {
@@ -46,8 +50,10 @@ public class Language {
                 } else {
                     dummy();
                 }
+                Connection conn = DriverManager.getConnection("foo");
+                PreparedStatement stmt = conn.prepareStatement("bar");
             } catch (SQLException se) {
-                foo = "inner SQLException";
+                foo = "inner IOException";
                 raise();
             } catch (Exception e) {
                 foo = "inner Exception";
@@ -73,6 +79,8 @@ public class Language {
                 } else {
                     dummy();
                 }
+                Connection conn = DriverManager.getConnection("foo");
+                PreparedStatement stmt = conn.prepareStatement("bar");
             } catch (SQLException se) {
                 foo = "inner SQLException";
                 raise();

@@ -7,7 +7,6 @@ import com.github.javaparser.ast.expr.*
 import com.github.javaparser.ast.stmt.*
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter
-import com.github.javaparser.resolution.declarations.ResolvedDeclaration
 import com.github.javaparser.resolution.types.ResolvedType
 import com.github.javaparser.symbolsolver.JavaSymbolSolver
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ClassLoaderTypeSolver
@@ -15,7 +14,9 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.MemoryTypeSolver
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver
 import com.github.javaparser.utils.SourceRoot
-import java.lang.Exception
+import io.github.classgraph.ClassGraph
+import io.github.classgraph.MethodInfo
+import io.github.classgraph.ScanResult
 import java.nio.file.Path
 
 typealias QualifiedName = String
@@ -35,8 +36,15 @@ fun main() {
 
     val project = SourceRoot(Path.of(projectRoot))
     project.parserConfiguration = config
-    project.tryToParse()
+    val results = project.tryToParseParallelized()
     val projectFiles = project.compilationUnits
+
+    // Debugging
+    for (result in results) {
+        if (!result.isSuccessful) {
+            println(result.problems)
+        }
+    }
 
     // Step 0. Desugar various forms of loops to simplify analysis
     for (file in projectFiles) {
@@ -54,7 +62,7 @@ fun main() {
         "java.sql.PreparedStatement.executeUpdate",
         "java.sql.Statement.executeUpdate"
     )
-    basicEffects.forEach { interGraph.markAsEffect(it) }
+    basicEffects.forEach { interGraph.markNameAsEffect(it) }
     interGraph.graphviz()
 
     // Step 2. Construct intraprocedural flow graph for each method
@@ -279,34 +287,119 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
 }
 
 /**
+ * Class Hierarchy Analysis
+ */
+fun chaResolve(expr: MethodCallExpr, classGraph: ScanResult): List<String> {
+    val decl = expr.resolve()
+    val result = mutableListOf<String>()
+    if (decl.isStatic || expr.scope.isPresent && expr.scope.get().isSuperExpr) {
+        // Java Symbol Solver can handle `super`
+        return listOf(decl.qualifiedSignature)
+    }
+
+    // Virtual calls
+    val staticType = if (decl.packageName == "") {
+        decl.className
+    } else {
+        decl.packageName + "." + decl.className
+    }
+
+    // Treat SQL-related packages specially
+    if (setOf("java.sql", "javax.sql").contains(decl.packageName)) {
+        return listOf(decl.qualifiedSignature)
+    }
+
+    val typeInfo = classGraph.getClassInfo(staticType)
+        ?: // There's no more information
+        return listOf(decl.qualifiedSignature)
+
+    // A default method has code
+    if (typeInfo.isInterface && decl.isDefaultMethod) {
+        result.add(decl.qualifiedSignature)
+    } else if (typeInfo.isArrayClass || typeInfo.isExternalClass || typeInfo.isInnerClass
+        || typeInfo.isOuterClass || typeInfo.isStandardClass || typeInfo.isAnonymousInnerClass
+    ) {
+        result.add(decl.qualifiedSignature)
+    }
+
+    // Add all implementations / subclasses
+    fun getSig(m: MethodInfo): String {
+        val sb = StringBuilder()
+        sb.append(m.name)
+        sb.append("(")
+        if (m.parameterInfo.isNotEmpty()) {
+            sb.append(m.parameterInfo[0].typeDescriptor)
+            for (i in 1 until m.parameterInfo.size) {
+                sb.append(", ")
+                sb.append(m.parameterInfo[i].typeDescriptor)
+            }
+        }
+        sb.append(")")
+        return sb.toString()
+    }
+
+    fun getQualifiedSig(m: MethodInfo): String {
+        val sb = StringBuilder()
+        if (m.classInfo.packageName != "") {
+            sb.append(m.classInfo.packageName)
+            sb.append(".")
+        }
+        sb.append(m.className)
+        sb.append(".")
+        sb.append(getSig(m))
+        return sb.toString()
+    }
+
+    val downcast = if (typeInfo.isInterface) {
+        typeInfo.classesImplementing
+    } else {
+        typeInfo.subclasses
+    }
+//    println("virtual call: $expr, which has sig ${decl.signature}")
+    for (klass in downcast) {
+        for (m in klass.methodInfo[decl.name]) {
+            if (getSig(m) == decl.signature) {
+                result.add(getQualifiedSig(m))
+//                println("  Possibly ${getQualifiedSig(m)}")
+            }
+        }
+    }
+    return result.toList()
+}
+
+/**
  * Build the inter-graph for the project.
  */
 fun buildInterGraph(file: CompilationUnit): InterGraph {
     val fileVisitor = object : VoidVisitorAdapter<InterGraph>() {
-        var currentQualifiedName: QualifiedName? = null
+        var currentSig: String? = null
+        val classGraph = ClassGraph().enableAllInfo().scan()
 
         override fun visit(decl: ClassOrInterfaceDeclaration, g: InterGraph) {
-            currentQualifiedName = decl.resolve().qualifiedName
+            currentSig = decl.resolve().qualifiedName
             super.visit(decl, g)
         }
 
         override fun visit(decl: ConstructorDeclaration, g: InterGraph) {
-            currentQualifiedName = decl.resolve().qualifiedName
+            currentSig = decl.resolve().qualifiedSignature
             super.visit(decl, g)
         }
 
         override fun visit(decl: MethodDeclaration, g: InterGraph) {
-            currentQualifiedName = decl.resolve().qualifiedName
+            currentSig = decl.resolve().qualifiedSignature
             super.visit(decl, g)
         }
 
         override fun visit(expr: ObjectCreationExpr, g: InterGraph) {
-            g.add(currentQualifiedName!!, expr.resolve().qualifiedName)
+            g.add(currentSig!!, expr.resolve().qualifiedSignature)
             super.visit(expr, g)
         }
 
         override fun visit(expr: MethodCallExpr, g: InterGraph) {
-            g.add(currentQualifiedName!!, expr.resolve().qualifiedName)
+            super.visit(expr, g) // Arguments and/or Scope
+            for (sig in chaResolve(expr, classGraph)) {
+                g.add(currentSig!!, sig)
+            }
         }
     }
     val g = InterGraph()

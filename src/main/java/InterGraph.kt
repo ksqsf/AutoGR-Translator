@@ -22,14 +22,26 @@ class InterGraph {
     }
 
     /**
-     * Mark 'name' as an effect. All of its callers are also marked.
+     * Mark a qualified name as an effect.
      */
-    fun markAsEffect(name: QualifiedName) {
-        if (effect.contains(name) || (!graph.keys.contains(name) && !rgraph.keys.contains(name)))
+    fun markNameAsEffect(name: String) {
+        for (ms in graph.keys + rgraph.keys) {
+            println(ms)
+            if (ms.startsWith(name)) {
+                markAsEffect(ms)
+            }
+        }
+    }
+
+    /**
+     * Mark 'sig' as an effect. All of its callers are also marked.
+     */
+    fun markAsEffect(sig: QualifiedName) {
+        if (effect.contains(sig) || (!graph.keys.contains(sig) && !rgraph.keys.contains(sig)))
             return
         val q: Queue<QualifiedName> = LinkedList()
         val vis = mutableSetOf<QualifiedName>()
-        q.add(name)
+        q.add(sig)
         while (q.isNotEmpty()) {
             val cur = q.remove()
             if (vis.contains(cur))
