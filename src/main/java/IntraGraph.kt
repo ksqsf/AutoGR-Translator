@@ -358,7 +358,7 @@ class IntraGraph{
 
         val f = File("/tmp/$name.dot", )
         var text = ""
-        text += "digraph $name {"
+        text += "digraph \"$name\" {"
         for ((p, pAdj) in graph) {
             for ((q, cond) in pAdj) {
                 val s = "\"${str(p)}\" -> \"${str(q)}\" [label=\"${quote(cond.toString())}\"];"
@@ -394,7 +394,7 @@ class IntraGraph{
         return s
     }
 
-    fun check() {
+    private fun check() {
         for (p in rgraph.keys) {
             for ((q, cond) in rgraph[p]!!) {
                 assert(graph[q]!!.contains(OutEdge(p,cond)))

@@ -277,7 +277,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             println("Analyzing ${qname} hasBody=${decl.body.isPresent}")
             if (decl.body.isPresent) {
                 val g = decl.body.get().accept(blockVisitor, null)
-                g.graphviz(qname.filter { it.isLetterOrDigit() }.toUpperCase())
+                g.graphviz(qname)
                 gs.put(qname, g)
             }
         }
