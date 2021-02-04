@@ -44,6 +44,11 @@
             <artifactId>kotlinx-coroutines-core</artifactId>
             <version>1.4.2</version>
         </dependency>
+        <dependency>
+            <groupId>io.github.classgraph</groupId>
+            <artifactId>classgraph</artifactId>
+            <version>4.8.102</version>
+        </dependency>
     </dependencies>
 
     <repositories>
