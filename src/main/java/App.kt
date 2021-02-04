@@ -273,7 +273,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
 
     val topVisitor = object : VoidVisitorAdapter<IntraGraphSet>() {
         override fun visit(decl: MethodDeclaration, gs: IntraGraphSet) {
-            val qname = decl.resolve().qualifiedName
+            val qname = decl.resolve().qualifiedSignature
             println("Analyzing ${qname} hasBody=${decl.body.isPresent}")
             if (decl.body.isPresent) {
                 val g = decl.body.get().accept(blockVisitor, null)
