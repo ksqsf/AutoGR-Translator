@@ -120,7 +120,6 @@ class IntraGraph{
             rgraph[to] = mutableSetOf()
         graph[from]!!.add(OutEdge(to, label))
         rgraph[to]!!.add(OutEdge(from, label))
-        check()
     }
 
     ///
@@ -173,7 +172,6 @@ class IntraGraph{
         rgraph.remove(q)
         val s = idNode.remove(q)
         nodeId.remove(s)
-        check()
     }
 
     /**
@@ -191,7 +189,6 @@ class IntraGraph{
             mergeId(this.exceptId, rhs.exceptId)
         if (mergeContinue)
             mergeId(this.continueId, rhs.continueId)
-        check()
     }
 
     /**
