@@ -26,7 +26,6 @@ class InterGraph {
      */
     fun markNameAsEffect(name: String) {
         for (ms in graph.keys + rgraph.keys) {
-            println(ms)
             if (ms.startsWith(name)) {
                 markAsEffect(ms)
             }
