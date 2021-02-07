@@ -131,14 +131,14 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             g.union(bodyG, mergeBreak = false, mergeContinue = false)
             val cond = whileStmt.condition
             if (cond == BooleanLiteralExpr(true)) {
-                g.addEdgeId(g.getEntryId(), bodyG.getEntryId())
+                g.addEdgeId(g.entryId, bodyG.entryId)
             } else {
-                g.addEdgeId(g.getEntryId(), bodyG.getEntryId(), Label.Br(cond))
+                g.addEdgeId(g.entryId, bodyG.entryId, Label.Br(cond))
                 g.addEdgeFromEntryToExit(Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
             }
-            g.addEdgeId(bodyG.getExitId(), g.getEntryId())
-            g.addEdgeId(bodyG.getBreakId(), g.getExitId())
-            g.addEdgeId(bodyG.getContinueId(), g.getEntryId())
+            g.addEdgeId(bodyG.exitId, g.entryId)
+            g.addEdgeId(bodyG.breakId, g.exitId)
+            g.addEdgeId(bodyG.continueId, g.entryId)
             return g
         }
 
@@ -147,31 +147,31 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             val bodyG = doStmt.body.accept(this, arg)
             g.union(bodyG, mergeBreak = false, mergeContinue = false)
             val cond = doStmt.condition
-            g.addEdgeId(g.getEntryId(), bodyG.getEntryId())
+            g.addEdgeId(g.entryId, bodyG.entryId)
             if (cond == BooleanLiteralExpr(true)) {
-                g.addEdgeId(bodyG.getExitId(), g.getEntryId())
+                g.addEdgeId(bodyG.exitId, g.entryId)
             } else {
-                g.addEdgeId(bodyG.getExitId(), g.getEntryId(), Label.Br(cond))
+                g.addEdgeId(bodyG.exitId, g.entryId, Label.Br(cond))
                 g.addEdgeId(
-                    bodyG.getExitId(),
-                    g.getExitId(),
+                    bodyG.exitId,
+                    g.exitId,
                     Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT))
                 )
             }
-            g.addEdgeId(bodyG.getContinueId(), bodyG.getExitId())
-            g.addEdgeId(bodyG.getBreakId(), g.getExitId())
+            g.addEdgeId(bodyG.continueId, bodyG.exitId)
+            g.addEdgeId(bodyG.breakId, g.exitId)
             return g
         }
 
         override fun visit(breakStmt: BreakStmt, arg: Void?): IntraGraph {
             val g = IntraGraph()
-            g.addEdgeId(g.getEntryId(), g.getBreakId())
+            g.addEdgeId(g.entryId, g.breakId)
             return g
         }
 
         override fun visit(continueStmt: ContinueStmt, arg: Void?): IntraGraph {
             val g = IntraGraph()
-            g.addEdgeId(g.getEntryId(), g.getContinueId())
+            g.addEdgeId(g.entryId, g.continueId)
             return g
         }
 
@@ -223,34 +223,34 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             val g = IntraGraph()
             val bodyG = tryStmt.tryBlock.accept(this, null)
             g.union(bodyG, mergeExcept = false)
-            g.addEdgeId(g.getEntryId(), bodyG.getEntryId())
+            g.addEdgeId(g.entryId, bodyG.entryId)
             if (tryStmt.finallyBlock.isPresent) {
                 val finallyG = tryStmt.finallyBlock.get().accept(this, null)
                 val finallyGEx = finallyG.clone()
                 g.union(finallyG, mergeExcept = false)
                 g.union(finallyGEx, mergeExcept = false)
-                g.addEdgeId(bodyG.getExitId(), finallyG.getEntryId())
-                g.addEdgeId(finallyG.getExitId(), g.getExitId())
+                g.addEdgeId(bodyG.exitId, finallyG.entryId)
+                g.addEdgeId(finallyG.exitId, g.exitId)
                 for (catch in tryStmt.catchClauses) {
                     val catchG = catch.body.accept(this, null)
                     val ty = catch.parameter.type.resolve()
                     val name = catch.parameter.name
                     g.union(catchG, mergeExcept = false)
-                    g.addEdgeId(bodyG.getExceptId(), catchG.getEntryId(), Label.Catch(name, ty))
-                    g.addEdgeId(catchG.getExceptId(), finallyGEx.getEntryId())
-                    g.addEdgeId(finallyGEx.getExitId(), g.getExceptId())
-                    g.addEdgeId(catchG.getExitId(), finallyG.getEntryId())
+                    g.addEdgeId(bodyG.exceptId, catchG.entryId, Label.Catch(name, ty))
+                    g.addEdgeId(catchG.exceptId, finallyGEx.entryId)
+                    g.addEdgeId(finallyGEx.exitId, g.exceptId)
+                    g.addEdgeId(catchG.exitId, finallyG.entryId)
                 }
             } else {
-                g.addEdgeId(bodyG.getExitId(), g.getExitId())
+                g.addEdgeId(bodyG.exitId, g.exitId)
                 for (catch in tryStmt.catchClauses) {
                     val catchG = catch.body.accept(this, null)
                     val ty = catch.parameter.type.resolve()
                     val name = catch.parameter.name
                     g.union(catchG, mergeExcept = false)
-                    g.addEdgeId(bodyG.getExceptId(), catchG.getEntryId(), Label.Catch(name, ty))
-                    g.addEdgeId(catchG.getExceptId(), g.getExceptId())
-                    g.addEdgeId(catchG.getExitId(), g.getExitId())
+                    g.addEdgeId(bodyG.exceptId, catchG.entryId, Label.Catch(name, ty))
+                    g.addEdgeId(catchG.exceptId, g.exceptId)
+                    g.addEdgeId(catchG.exitId, g.exitId)
                 }
             }
             return g

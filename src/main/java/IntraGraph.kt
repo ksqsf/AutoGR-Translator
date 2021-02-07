@@ -60,14 +60,14 @@ class IntraGraph{
         return IDGen.gen()
     }
 
-    private var nodeId: MutableMap<Statement, Int> = mutableMapOf()
-    private var idNode: MutableMap<Int, Statement> = mutableMapOf()
-    private var entryId: Int = newId()
-    private var exitId: Int = newId()
-    private var returnId: Int = newId()
-    private var exceptId: Int = newId()
-    private var breakId: Int = newId()
-    private var continueId: Int = newId()
+    var nodeId: MutableMap<Statement, Int> = mutableMapOf()
+    var idNode: MutableMap<Int, Statement> = mutableMapOf()
+    var entryId: Int = newId()
+    var exitId: Int = newId()
+    var returnId: Int = newId()
+    var exceptId: Int = newId()
+    var breakId: Int = newId()
+    var continueId: Int = newId()
 
     fun isSpecial(id: Int): Boolean {
         return id == entryId || id == exitId || id == returnId || id == exceptId || id == breakId || id == continueId
@@ -110,8 +110,8 @@ class IntraGraph{
 
     data class OutEdge(val next: Int, val label: Label)
 
-    private var graph: MutableMap<Int, MutableSet<OutEdge>> = mutableMapOf()
-    private var rgraph: MutableMap<Int, MutableSet<OutEdge>> = mutableMapOf()
+    var graph: MutableMap<Int, MutableSet<OutEdge>> = mutableMapOf()
+    var rgraph: MutableMap<Int, MutableSet<OutEdge>> = mutableMapOf()
 
     fun addEdgeId(from: Int, to: Int, label: Label = Label.T) {
         if (!graph.containsKey(from))
@@ -235,8 +235,8 @@ class IntraGraph{
             return false
         if (graph[id] == null || rgraph[id] == null || graph[id]!!.size != 1 || rgraph[id]!!.size != 1)
             return false
-        val (succ, scond) = graph[id]!!.first()
-        val (pred, pcond) = rgraph[id]!!.first()
+        val (_, scond) = graph[id]!!.first()
+        val (_, pcond) = rgraph[id]!!.first()
         if (scond != Label.T || pcond != Label.T)
             return false
 //        if (graph[pred] == null || rgraph[succ] == null || graph[pred]!!.size != 1 || rgraph[succ]!!.size != 1)
@@ -316,7 +316,7 @@ class IntraGraph{
     }
 
     /**
-     * Remove non-essential nodes.
+     * Remove unnecessary nodes.
      *
      * 1. Trivial nodes (ones which have only one pred and one succ, both edge labels are true) are removed.
      * 2. Unreachable nodes are removed.
