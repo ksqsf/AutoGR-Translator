@@ -1,12 +1,12 @@
-import com.github.javaparser.ast.expr.BooleanLiteralExpr
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.ast.expr.SimpleName
 import com.github.javaparser.ast.stmt.ExpressionStmt
 import com.github.javaparser.ast.stmt.Statement
 import com.github.javaparser.resolution.types.ResolvedType
-import javassist.expr.Expr
 import java.io.File
 import java.util.*
+
+typealias IntraPath = List<IntraGraph.OutEdge>
 
 fun quote(str: String): String {
     return str.replace("\\", "\\\\")
@@ -71,30 +71,6 @@ class IntraGraph{
 
     fun isSpecial(id: Int): Boolean {
         return id == entryId || id == exitId || id == returnId || id == exceptId || id == breakId || id == continueId
-    }
-
-    fun getEntryId(): Int {
-        return entryId
-    }
-
-    fun getExitId(): Int {
-        return exitId
-    }
-
-    fun getBreakId(): Int {
-        return breakId
-    }
-
-    fun getReturnId(): Int {
-        return returnId
-    }
-
-    fun getExceptId(): Int {
-        return exceptId
-    }
-
-    fun getContinueId(): Int {
-        return continueId
     }
 
     private fun addNodeIfAbsent(stmt: Statement): Int {
@@ -433,5 +409,54 @@ class IntraGraph{
             clone.nodeId[node] = map[id]!!
         }
         return clone
+    }
+
+    fun effectPathsFromEntry(dest: Int): Set<IntraPath> {
+        val res = mutableSetOf<IntraPath>()
+        val vis = mutableSetOf<Int>()
+        fun dfs(cur: Int, path: MutableList<OutEdge>, effect: Boolean) {
+            // FIXME: cycle
+            if (vis.contains(cur))
+                return
+            vis.add(cur)
+            if (cur == entryId) {
+                if (effect)
+                    res.add(path.reversed().toList())
+                return
+            }
+            for (edge in rgraph[cur]!!) {
+                path.add(edge)
+                if (effect) {
+                    dfs(edge.next, path, true)
+                } else {
+                    dfs(edge.next, path, idNode.containsKey(cur) && containsUpdate(idNode[cur]!!))
+                }
+                path.removeLast()
+            }
+        }
+        dfs(dest, mutableListOf(), false)
+        return res.toSet()
+    }
+
+    fun collectEffectPaths(): Map<Int, Set<IntraPath>> {
+        val paths = mutableMapOf<Int, MutableSet<IntraPath>>()
+        for ((id, stmt) in idNode) {
+            if (!stmt.isExpressionStmt)
+                continue
+            val exp = stmt.asExpressionStmt().expression
+            if (!exp.isMethodCallExpr)
+                continue
+            val callee = exp.asMethodCallExpr().resolve()
+            // FIXME: check if a method is committing precisely
+            if (callee.qualifiedName == "java.sql.Connection.commit"
+                || callee.qualifiedName == "edu.rice.rubis.servlets.Database.commit"
+                || callee.qualifiedName == "java.sql.Statement.executeUpdate") {
+                for (path in effectPathsFromEntry(id)) {
+                    paths.putIfAbsent(id, mutableSetOf())
+                    paths[id]!!.add(path)
+                }
+            }
+        }
+        return paths.mapValues { it.value.toSet() }.toMap()
     }
 }

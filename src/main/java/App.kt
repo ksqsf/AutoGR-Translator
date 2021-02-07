@@ -71,6 +71,20 @@ fun main() {
         buildIntraGraph(file, intraGraphs)
     }
 
+    for (eff in interGraph.effect) {
+        println("Analyzing effect $eff")
+        val g = intraGraphs[eff]
+        if (g == null) {
+            println("No information recorded for $eff")
+            continue
+        }
+        val p = g.collectEffectPaths()
+        println("there are ${p.size} paths")
+        for ((commitId, path) in p) {
+            println("$commitId: $path")
+        }
+    }
+
     println("Finished")
 }
 
@@ -277,7 +291,8 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             println("Analyzing ${qname} hasBody=${decl.body.isPresent}")
             if (decl.body.isPresent) {
                 val g = decl.body.get().accept(blockVisitor, null)
-                g.graphviz(qname)
+                g.optimize()
+                // g.graphviz(qname)
                 gs.put(qname, g)
             }
         }

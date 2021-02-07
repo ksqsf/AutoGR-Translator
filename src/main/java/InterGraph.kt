@@ -4,7 +4,7 @@ import java.util.*
 class InterGraph {
     private val graph = mutableMapOf< QualifiedName, MutableSet<QualifiedName> > ()
     private val rgraph = mutableMapOf<QualifiedName, MutableSet<QualifiedName>>()
-    private val effect = mutableSetOf<QualifiedName>()
+    val effect = mutableSetOf<QualifiedName>()
 
     fun add(caller: QualifiedName, callee: QualifiedName) {
         graph.putIfAbsent(caller, mutableSetOf())
@@ -61,7 +61,7 @@ class InterGraph {
                 continue
             }
             for (callee in callees) {
-                s += "\"${caller}\" -> \"${callee}\";";
+                s += "\"${caller}\" -> \"${callee}\";"
             }
         }
         for (e in effect) {
