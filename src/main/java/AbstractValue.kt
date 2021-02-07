@@ -1,47 +1,47 @@
 import com.github.javaparser.ast.expr.Expression
+import com.github.javaparser.resolution.types.ResolvedType
 
-sealed class AbstractValue(val expr : Expression) {
+sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) {
 
-    // A known Java constant
-    data class Java(
-            val e: Expression,
-            val data : Object
-            ): AbstractValue(e)
+    data class Null(
+        val e: Expression,
+        val t: ResolvedType
+    ): AbstractValue(e, t)
 
-    // Unknown value
+    data class Data(
+        val e: Expression,
+        val t: ResolvedType,
+        val data: Any
+    ): AbstractValue(e, t)
+
     data class Unknown(
-            val e: Expression,
+        val e: Expression,
+        val t: ResolvedType
+    ): AbstractValue(e, t)
 
-            ): AbstractValue(e)
+    data class Query(
+        val e: Expression,
+        val t: ResolvedType,
+        val table: List<String>,
+        val attrs: List<String>
+    ): AbstractValue(e, t)
 
-    // QueryValue
-    data class QueryValue(
-            val e: Expression,
-            val table: String,
-            val attrs: Array<String>
-            ): AbstractValue(e) {
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            if (javaClass != other?.javaClass) return false
+    // Method call or object construction
+    data class Call(
+        val e: Expression,
+        val t: ResolvedType
+    ): AbstractValue(e, t)
 
-            other as QueryValue
+    data class Unary(
+        val e: Expression,
+        val t: ResolvedType,
+        val value: AbstractValue
+    ): AbstractValue(e, t)
 
-            if (e != other.e) return false
-            if (table != other.table) return false
-            if (!attrs.contentEquals(other.attrs)) return false
-
-            return true
-        }
-
-        override fun hashCode(): Int {
-            var result = e.hashCode()
-            result = 31 * result + table.hashCode()
-            result = 31 * result + attrs.contentHashCode()
-            return result
-        }
-    }
-
-    data class Composite(
-            val e: Expression
-            ): AbstractValue(e)
+    data class Binary(
+        val e: Expression,
+        val t: ResolvedType,
+        val left: AbstractValue,
+        val right: AbstractValue
+    ): AbstractValue(e, t)
 }
