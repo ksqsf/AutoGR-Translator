@@ -75,7 +75,7 @@ public class SimpleJDBC {
             //STEP 4: Execute a query
             System.out.println("Creating statement...");
             stmt = conn.createStatement();
-            stmt.executeQuery("INSERT INTO Employees VALUES (0, \"john\", \"doe\", 30)");
+            stmt.executeUpdate("INSERT INTO Employees VALUES (0, \"john\", \"doe\", 30)");
             String sql;
             sql = "SELECT id, first, last, age FROM Employees";
             ResultSet rs = stmt.executeQuery(sql);
