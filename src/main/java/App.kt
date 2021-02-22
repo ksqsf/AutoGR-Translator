@@ -19,76 +19,94 @@ import io.github.classgraph.MethodInfo
 import io.github.classgraph.ScanResult
 import java.nio.file.Path
 
+typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
+
+class Analyzer(projectRoot: String) {
+    val interGraph: InterGraph
+    val intraGraphs: IntraGraphSet
+
+    init {
+        val typeSolver = CombinedTypeSolver(
+            MemoryTypeSolver(),
+            ReflectionTypeSolver(),
+            ClassLoaderTypeSolver(ClassLoader.getSystemClassLoader())
+        )
+        val symbolSolver = JavaSymbolSolver(typeSolver)
+
+        val config = ParserConfiguration()
+        config.setSymbolResolver(symbolSolver)
+
+        val project = SourceRoot(Path.of(projectRoot))
+        project.parserConfiguration = config
+        val results = project.tryToParseParallelized()
+        val projectFiles = project.compilationUnits
+
+        // Debugging
+        for (result in results) {
+            if (!result.isSuccessful) {
+                println(result.problems)
+            }
+        }
+
+        // Step 0. Desugar various forms of loops to simplify analysis
+        for (file in projectFiles) {
+            transformLoops(file)
+        }
+
+        // Step 1. Construct interprocedural call graph for the project
+        interGraph = InterGraph()
+        for (file in projectFiles) {
+            println("Intergraph: ${file.storage.get().fileName}")
+            val fileG = buildInterGraph(file)
+            interGraph.union(fileG)
+        }
+        val basicEffects = listOf(
+            "java.sql.PreparedStatement.executeUpdate",
+            "java.sql.Statement.executeUpdate"
+        )
+        basicEffects.forEach { interGraph.markNameAsEffect(it) }
+
+        // Step 2. Construct intraprocedural flow graph for each method
+        intraGraphs = mutableMapOf()
+        for (file in projectFiles) {
+            buildIntraGraph(file, intraGraphs)
+        }
+
+        for (eff in interGraph.effect) {
+            println("Analyzing effect $eff")
+            val g = intraGraphs[eff]
+            if (g == null) {
+                println("No information recorded for $eff")
+                continue
+            }
+            val p = g.collectEffectPaths()
+            println("there are ${p.size} paths")
+            for ((commitId, path) in p) {
+                println("$commitId: $path")
+            }
+        }
+
+        println("Finished")
+    }
+
+    fun graphviz() {
+        println("Visualizing intergraph...")
+        interGraph.graphviz()
+        for ((qn, g) in intraGraphs) {
+            println("Visualizing $qn...")
+            g.graphviz()
+        }
+    }
+}
 
 fun main() {
     val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
 //    val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
-    val typeSolver = CombinedTypeSolver(
-        MemoryTypeSolver(),
-        ReflectionTypeSolver(),
-        ClassLoaderTypeSolver(ClassLoader.getSystemClassLoader())
-    )
-    val symbolSolver = JavaSymbolSolver(typeSolver)
 
-    val config = ParserConfiguration()
-    config.setSymbolResolver(symbolSolver)
-
-    val project = SourceRoot(Path.of(projectRoot))
-    project.parserConfiguration = config
-    val results = project.tryToParseParallelized()
-    val projectFiles = project.compilationUnits
-
-    // Debugging
-    for (result in results) {
-        if (!result.isSuccessful) {
-            println(result.problems)
-        }
-    }
-
-    // Step 0. Desugar various forms of loops to simplify analysis
-    for (file in projectFiles) {
-        transformLoops(file)
-    }
-
-    // Step 1. Construct interprocedural call graph for the project
-    val interGraph = InterGraph()
-    for (file in projectFiles) {
-        println("Intergraph: ${file.storage.get().fileName}")
-        val fileG = buildInterGraph(file)
-        interGraph.union(fileG)
-    }
-    val basicEffects = listOf(
-        "java.sql.PreparedStatement.executeUpdate",
-        "java.sql.Statement.executeUpdate"
-    )
-    basicEffects.forEach { interGraph.markNameAsEffect(it) }
-    interGraph.graphviz()
-
-    // Step 2. Construct intraprocedural flow graph for each method
-    val intraGraphs: MutableMap<QualifiedName, IntraGraph> = mutableMapOf()
-    for (file in projectFiles) {
-        buildIntraGraph(file, intraGraphs)
-    }
-
-    for (eff in interGraph.effect) {
-        println("Analyzing effect $eff")
-        val g = intraGraphs[eff]
-        if (g == null) {
-            println("No information recorded for $eff")
-            continue
-        }
-        val p = g.collectEffectPaths()
-        println("there are ${p.size} paths")
-        for ((commitId, path) in p) {
-            println("$commitId: $path")
-        }
-    }
-
-    println("Finished")
+    val analyzer = Analyzer(projectRoot)
+    // analyzer.graphviz()
 }
-
-typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 
 /**
  * Build intra-graph for a compilation unit.
@@ -292,7 +310,6 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             if (decl.body.isPresent) {
                 val g = decl.body.get().accept(blockVisitor, null)
                 g.optimize()
-                // g.graphviz(qname)
                 gs.put(qname, g)
             }
         }
