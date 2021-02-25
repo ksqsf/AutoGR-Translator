@@ -23,8 +23,9 @@ typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
 
 class Analyzer(projectRoot: String) {
-    val interGraph: InterGraph
-    val intraGraphs: IntraGraphSet
+    val intergraph: InterGraph
+    val intragraphs: IntraGraphSet
+    val schema = Schema()
 
     init {
         val typeSolver = CombinedTypeSolver(
@@ -55,57 +56,78 @@ class Analyzer(projectRoot: String) {
         }
 
         // Step 1. Construct interprocedural call graph for the project
-        interGraph = InterGraph()
+        intergraph = InterGraph()
         for (file in projectFiles) {
             println("Intergraph: ${file.storage.get().fileName}")
             val fileG = buildInterGraph(file)
-            interGraph.union(fileG)
+            intergraph.union(fileG)
         }
         val basicEffects = listOf(
             "java.sql.PreparedStatement.executeUpdate",
             "java.sql.Statement.executeUpdate"
         )
-        basicEffects.forEach { interGraph.markNameAsEffect(it) }
+        basicEffects.forEach { intergraph.markNameAsEffect(it) }
 
         // Step 2. Construct intraprocedural flow graph for each method
-        intraGraphs = mutableMapOf()
+        intragraphs = mutableMapOf()
         for (file in projectFiles) {
-            buildIntraGraph(file, intraGraphs)
+            buildIntraGraph(file, intragraphs)
         }
 
-        for (eff in interGraph.effect) {
-            println("Analyzing effect $eff")
-            val g = intraGraphs[eff]
-            if (g == null) {
-                println("No information recorded for $eff")
-                continue
-            }
-            val p = g.collectEffectPaths()
-            println("there are ${p.size} paths")
-            for ((commitId, path) in p) {
-                println("$commitId: $path")
-            }
-        }
+//        for (eff in intergraph.effect) {
+//            println("Analyzing effect $eff")
+//            val g = intragraphs[eff]
+//            if (g == null) {
+//                println("No information recorded for $eff")
+//                continue
+//            }
+//            val p = g.collectEffectPaths()
+//            println("there are ${p.size} paths")
+//            for ((commitId, path) in p) {
+//                println("$commitId: $path")
+//            }
+//        }
 
         println("Finished")
     }
 
     fun graphviz() {
         println("Visualizing intergraph...")
-        interGraph.graphviz()
-        for ((qn, g) in intraGraphs) {
+        intergraph.graphviz(onlyEffect = true)
+        val cnt = mutableMapOf<QualifiedName, Int>()
+        val normalize = { str: String -> quote(str).takeWhile { it != '(' } }
+        val subprocesses = mutableListOf<Process>()
+        for ((qn, g) in intragraphs) {
             println("Visualizing $qn...")
-            g.graphviz()
+            cnt.putIfAbsent(qn, 0)
+            cnt[qn] = cnt[qn]!! + 1
+//            val proc = g.graphviz(qn.substring(24) + "${cnt[qn]}")
+            val proc = g.graphviz(qn + "${cnt[qn]}")
+            subprocesses.add(proc)
         }
+        for (proc in subprocesses) {
+            proc.waitFor()
+        }
+    }
+
+    fun loadSchema(schemaFile: String) {
+        schema.loadFile(schemaFile)
     }
 }
 
 fun main() {
-    val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
-//    val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
+    val projectRoot = "/Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/procedures"
+    val ddl = "/Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/ddls/healthplus-ddl.sql"
 
     val analyzer = Analyzer(projectRoot)
-    // analyzer.graphviz()
+    analyzer.graphviz()
+    analyzer.loadSchema(ddl)
+
+    for (effect in analyzer.intergraph.effect) {
+        println("* Effect $effect")
+        val g = analyzer.intragraphs[effect] ?: continue
+        println(g.collectEffectPaths())
+    }
 }
 
 /**
