@@ -445,17 +445,14 @@ class IntraGraph{
 
     fun collectEffectPaths(): Map<Int, Set<IntraPath>> {
         val paths = mutableMapOf<Int, MutableSet<IntraPath>>()
+        // From each committing node, traverse up to the entry.
+        // There can be many paths leading to a committing node,
+        // and only effectful ones are collected here.
         for ((id, stmt) in idNode) {
-            if (!stmt.isExpressionStmt)
-                continue
-            val exp = stmt.asExpressionStmt().expression
-            if (!exp.isMethodCallExpr)
-                continue
-            val callee = exp.asMethodCallExpr().resolve()
-            // FIXME: check if a method is committing precisely
-            if (callee.qualifiedName == "java.sql.Connection.commit"
-                || callee.qualifiedName == "edu.rice.rubis.servlets.Database.commit"
-                || callee.qualifiedName == "java.sql.Statement.executeUpdate") {
+            // FIXME: check if a method is committing precisely.
+            // This should include wrappers.
+            // FIXME: Should remove containsUpdate.
+            if (containsCommit(stmt) || containsUpdate(stmt)) {
                 for (path in effectPathsFromEntry(id)) {
                     paths.putIfAbsent(id, mutableSetOf())
                     paths[id]!!.add(path)
