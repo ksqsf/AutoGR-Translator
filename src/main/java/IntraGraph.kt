@@ -312,7 +312,7 @@ class IntraGraph{
      *
      * @param opt whether to optimize this graph before printing
      */
-    fun graphviz(name: String = "G", opt: Boolean = true) {
+    fun graphviz(name: String = "G", opt: Boolean = true): Process {
         if (opt)
             optimize()
 
@@ -329,7 +329,12 @@ class IntraGraph{
             }
         }
 
-        val f = File("/tmp/$name.dot", )
+        val normalize = {
+            str: String ->
+            str.takeWhile { it != '(' }
+        }
+
+        val f = File("/tmp/${normalize(name)}.dot", )
         var text = ""
         text += "digraph \"$name\" {"
         for ((p, pAdj) in graph) {
@@ -340,8 +345,8 @@ class IntraGraph{
         }
         text += "}"
         f.writeText(text)
-        val r = Runtime.getRuntime().exec("dot -Tpng /tmp/$name.dot -O")
-        r.waitFor()
+        val r = Runtime.getRuntime().exec("dot -Tpng /tmp/${normalize(name)}.dot -O")
+        return r
     }
 
     override fun toString(): String {
