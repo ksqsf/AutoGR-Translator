@@ -120,7 +120,7 @@ fun main() {
     val ddl = "/Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/ddls/healthplus-ddl.sql"
 
     val analyzer = Analyzer(projectRoot)
-    analyzer.graphviz()
+    // analyzer.graphviz()
     analyzer.loadSchema(ddl)
 
     for (effect in analyzer.intergraph.effect) {
@@ -128,6 +128,8 @@ fun main() {
         val g = analyzer.intragraphs[effect] ?: continue
         println(g.collectEffectPaths())
     }
+
+    println(generateRigi("HealthPlus", analyzer))
 }
 
 /**

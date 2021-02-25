@@ -48,6 +48,10 @@ class Table(val def: CreateTable) {
     fun get(i: Int): Column {
         return columns.get(i)
     }
+
+    override fun toString(): String {
+        return name
+    }
 }
 
 class Column(val def: ColumnDefinition) {
