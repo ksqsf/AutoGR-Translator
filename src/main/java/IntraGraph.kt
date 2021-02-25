@@ -1,3 +1,4 @@
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.ast.expr.SimpleName
 import com.github.javaparser.ast.stmt.ExpressionStmt
@@ -6,7 +7,11 @@ import com.github.javaparser.resolution.types.ResolvedType
 import java.io.File
 import java.util.*
 
-typealias IntraPath = List<IntraGraph.OutEdge>
+data class IntraPath(val path: List<IntraGraph.OutEdge>, val intragraph: IntraGraph) {
+    operator fun iterator(): Iterator<IntraGraph.OutEdge> {
+        return path.iterator()
+    }
+}
 
 fun quote(str: String): String {
     return str.replace("\\", "\\\\")
@@ -60,7 +65,7 @@ sealed class Label {
  *
  * Upon union, `return` are always merged. `except` and `break` are usually, but not always, merged.
  */
-class IntraGraph{
+class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
 
     private fun newId(): Int {
         return IDGen.gen()
@@ -396,7 +401,7 @@ class IntraGraph{
     }
 
     fun clone(): IntraGraph {
-        val clone = IntraGraph()
+        val clone = IntraGraph(this.classDef)
         val map: MutableMap<Int,Int> = mutableMapOf() // this id -> clone id
         for (id in graph.keys + rgraph.keys) {
             map[id] = newId()
@@ -436,7 +441,7 @@ class IntraGraph{
             vis.add(cur)
             if (cur == entryId) {
                 if (effect)
-                    res.add(path.reversed().toList())
+                    res.add(IntraPath(path.reversed().toList(), this))
                 return
             }
             for (edge in rgraph[cur]!!) {

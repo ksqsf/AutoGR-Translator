@@ -164,26 +164,26 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
         }
     }
 
-    val blockVisitor = object : GenericVisitorAdapter<IntraGraph, Void>() {
+    val blockVisitor = object : GenericVisitorAdapter<IntraGraph, ClassOrInterfaceDeclaration>() {
         var depth = 0
 
-        override fun visit(blockStmt: BlockStmt, arg: Void?): IntraGraph {
+        override fun visit(blockStmt: BlockStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
             debug(" ".repeat(depth) + ".Find block")
             depth += 1
-            val g = IntraGraph()
+            val g = IntraGraph(classDef)
             if (blockStmt.childNodes.size == 0) {
                 g.addEdgeFromEntryToExit()
                 return g
             }
-            val subG = blockStmt.statements.map { it.accept(this, null) }
+            val subG = blockStmt.statements.map { it.accept(this, classDef) }
             g.sequence(subG)
             depth -= 1
             return g
         }
 
-        override fun visit(whileStmt: WhileStmt, arg: Void?): IntraGraph {
-            val g = IntraGraph()
-            val bodyG = whileStmt.body.accept(this, arg)
+        override fun visit(whileStmt: WhileStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
+            val g = IntraGraph(classDef)
+            val bodyG = whileStmt.body.accept(this, classDef)
             g.union(bodyG, mergeBreak = false, mergeContinue = false)
             val cond = whileStmt.condition
             if (cond == BooleanLiteralExpr(true)) {
@@ -198,9 +198,9 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             return g
         }
 
-        override fun visit(doStmt: DoStmt, arg: Void?): IntraGraph {
-            val g = IntraGraph()
-            val bodyG = doStmt.body.accept(this, arg)
+        override fun visit(doStmt: DoStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
+            val g = IntraGraph(classDef)
+            val bodyG = doStmt.body.accept(this, classDef)
             g.union(bodyG, mergeBreak = false, mergeContinue = false)
             val cond = doStmt.condition
             g.addEdgeId(g.entryId, bodyG.entryId)
@@ -219,28 +219,28 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             return g
         }
 
-        override fun visit(breakStmt: BreakStmt, arg: Void?): IntraGraph {
-            val g = IntraGraph()
+        override fun visit(breakStmt: BreakStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
+            val g = IntraGraph(classDef)
             g.addEdgeId(g.entryId, g.breakId)
             return g
         }
 
-        override fun visit(continueStmt: ContinueStmt, arg: Void?): IntraGraph {
-            val g = IntraGraph()
+        override fun visit(continueStmt: ContinueStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
+            val g = IntraGraph(classDef)
             g.addEdgeId(g.entryId, g.continueId)
             return g
         }
 
-        override fun visit(ifStmt: IfStmt, arg: Void?): IntraGraph {
-            val g = IntraGraph()
+        override fun visit(ifStmt: IfStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
+            val g = IntraGraph(classDef)
             val cond = ifStmt.condition
             debug(" ".repeat(depth) + ".Find if " + cond)
 
             val thenStmt = ifStmt.thenStmt
-            val thenG = thenStmt.accept(this, null)
+            val thenG = thenStmt.accept(this, classDef)
             if (ifStmt.elseStmt.isPresent) {
                 val elseStmt = ifStmt.elseStmt.get()
-                val elseG = elseStmt.accept(this, null)
+                val elseG = elseStmt.accept(this, classDef)
                 g.addBetweenEntryAndExit(thenG, Label.Br(cond))
                 g.addBetweenEntryAndExit(elseG, Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
             } else {
@@ -250,9 +250,9 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             return g
         }
 
-        override fun visit(expressionStmt: ExpressionStmt, arg: Void?): IntraGraph {
+        override fun visit(expressionStmt: ExpressionStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
             debug(" ".repeat(depth) + ".Find expr " + expressionStmt)
-            val g = IntraGraph()
+            val g = IntraGraph(classDef)
             g.addEdgeFromEntry(expressionStmt, depth)
             g.addEdgeToExit(expressionStmt, depth)
             val exc = expressionStmt.expression.accept(exceptionVisitor, null)
@@ -264,9 +264,9 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             return g
         }
 
-        override fun visit(throwStmt: ThrowStmt, arg: Void?): IntraGraph {
+        override fun visit(throwStmt: ThrowStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
             debug(" ".repeat(depth) + ".Find expr " + throwStmt)
-            val g = IntraGraph()
+            val g = IntraGraph(classDef)
             val e = throwStmt.expression
             val ty = e.calculateResolvedType()
             g.addEdgeFromEntry(throwStmt, depth)
@@ -274,21 +274,21 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             return g
         }
 
-        override fun visit(tryStmt: TryStmt, arg: Void?): IntraGraph {
+        override fun visit(tryStmt: TryStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
             debug(" ".repeat(depth) + ".Find try")
-            val g = IntraGraph()
-            val bodyG = tryStmt.tryBlock.accept(this, null)
+            val g = IntraGraph(classDef)
+            val bodyG = tryStmt.tryBlock.accept(this, classDef)
             g.union(bodyG, mergeExcept = false)
             g.addEdgeId(g.entryId, bodyG.entryId)
             if (tryStmt.finallyBlock.isPresent) {
-                val finallyG = tryStmt.finallyBlock.get().accept(this, null)
+                val finallyG = tryStmt.finallyBlock.get().accept(this, classDef)
                 val finallyGEx = finallyG.clone()
                 g.union(finallyG, mergeExcept = false)
                 g.union(finallyGEx, mergeExcept = false)
                 g.addEdgeId(bodyG.exitId, finallyG.entryId)
                 g.addEdgeId(finallyG.exitId, g.exitId)
                 for (catch in tryStmt.catchClauses) {
-                    val catchG = catch.body.accept(this, null)
+                    val catchG = catch.body.accept(this, classDef)
                     val ty = catch.parameter.type.resolve()
                     val name = catch.parameter.name
                     g.union(catchG, mergeExcept = false)
@@ -300,7 +300,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             } else {
                 g.addEdgeId(bodyG.exitId, g.exitId)
                 for (catch in tryStmt.catchClauses) {
-                    val catchG = catch.body.accept(this, null)
+                    val catchG = catch.body.accept(this, classDef)
                     val ty = catch.parameter.type.resolve()
                     val name = catch.parameter.name
                     g.union(catchG, mergeExcept = false)
@@ -312,15 +312,15 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             return g
         }
 
-        override fun visit(emptyStmt: EmptyStmt, arg: Void?): IntraGraph {
-            val g = IntraGraph()
+        override fun visit(emptyStmt: EmptyStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
+            val g = IntraGraph(classDef)
             g.addEdgeFromEntryToExit()
             return g
         }
 
-        override fun visit(returnStmt: ReturnStmt, arg: Void?): IntraGraph {
+        override fun visit(returnStmt: ReturnStmt, classDef: ClassOrInterfaceDeclaration): IntraGraph {
             debug(" ".repeat(depth) + ".Find return")
-            val g = IntraGraph()
+            val g = IntraGraph(classDef)
             g.addEdgeFromEntry(returnStmt, depth)
             g.addEdgeToReturn(returnStmt, depth)
             return g
@@ -328,11 +328,18 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
     }
 
     val topVisitor = object : VoidVisitorAdapter<IntraGraphSet>() {
+        var classDef: ClassOrInterfaceDeclaration? = null
+
+        override fun visit(decl: ClassOrInterfaceDeclaration, gs: IntraGraphSet) {
+            classDef = decl
+            super.visit(decl, gs)
+        }
+
         override fun visit(decl: MethodDeclaration, gs: IntraGraphSet) {
             val qname = decl.resolve().qualifiedSignature
             println("Analyzing ${qname} hasBody=${decl.body.isPresent}")
             if (decl.body.isPresent) {
-                val g = decl.body.get().accept(blockVisitor, null)
+                val g = decl.body.get().accept(blockVisitor, classDef)
                 g.optimize()
                 gs.put(qname, g)
             }

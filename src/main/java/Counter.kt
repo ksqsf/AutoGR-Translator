@@ -33,7 +33,7 @@ fun countEffectInCatch(analyzer: Analyzer): Set<QualifiedName> {
     val result = mutableSetOf<QualifiedName>()
     for (effect in analyzer.intergraph.effect) {
         val g = analyzer.intragraphs[effect] ?: continue
-        if (g.collectEffectPaths().values.any { it.any { it.any { it.label is Label.Catch } } }) {
+        if (g.collectEffectPaths().values.any { it.any { it.path.any { it.label is Label.Catch } } }) {
             println(". Effect $effect...")
             result.add(effect)
         }
@@ -56,7 +56,7 @@ fun countMultipleCommits(analyzer: Analyzer): Set<QualifiedName> {
     for (effect in analyzer.intergraph.effect) {
         val g = analyzer.intragraphs[effect] ?: continue
         // println("$effect: " + g.collectEffectPaths())
-        if (g.collectEffectPaths().values.any { it.any { it.any { containsCommitId(g, it.next) } } }) {
+        if (g.collectEffectPaths().values.any { it.any { it.path.any { containsCommitId(g, it.next) } } }) {
             println(". Effect $effect")
             result.add(effect)
         }
