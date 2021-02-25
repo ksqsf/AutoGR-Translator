@@ -7,7 +7,7 @@ import com.github.javaparser.resolution.types.ResolvedType
 import java.io.File
 import java.util.*
 
-data class IntraPath(val path: List<IntraGraph.OutEdge>, val intragraph: IntraGraph) {
+data class IntraPath(val path: List<IntraGraph.OutEdge>, val intragraph: IntraGraph, val final: Int) {
     operator fun iterator(): Iterator<IntraGraph.OutEdge> {
         return path.iterator()
     }
@@ -441,7 +441,7 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
             vis.add(cur)
             if (cur == entryId) {
                 if (effect)
-                    res.add(IntraPath(path.reversed().toList(), this))
+                    res.add(IntraPath(path.reversed().toList(), this, dest))
                 return
             }
             for (edge in rgraph[cur]!!) {
