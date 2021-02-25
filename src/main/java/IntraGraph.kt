@@ -14,6 +14,12 @@ fun quote(str: String): String {
             .replace("\"", "\\\"")
 }
 
+data class Node(val statement: Statement, val scopingDepth: Int) {
+    override fun toString(): String {
+        return "$statement @ $scopingDepth"
+    }
+}
+
 sealed class Label {
     object T: Label() {
         override fun toString(): String {
@@ -60,8 +66,8 @@ class IntraGraph{
         return IDGen.gen()
     }
 
-    var nodeId: MutableMap<Statement, Int> = mutableMapOf()
-    var idNode: MutableMap<Int, Statement> = mutableMapOf()
+    var nodeId: MutableMap<Node, Int> = mutableMapOf()
+    var idNode: MutableMap<Int, Node> = mutableMapOf()
     var entryId: Int = newId()
     var exitId: Int = newId()
     var returnId: Int = newId()
@@ -73,15 +79,19 @@ class IntraGraph{
         return id == entryId || id == exitId || id == returnId || id == exceptId || id == breakId || id == continueId
     }
 
-    private fun addNodeIfAbsent(stmt: Statement): Int {
-        return if (nodeId.containsKey(stmt)) {
-            nodeId[stmt]!!
+    private fun addNodeIfAbsent(node: Node): Int {
+        return if (nodeId.containsKey(node)) {
+            nodeId[node]!!
         } else {
             val id = newId()
-            nodeId[stmt] = id
-            idNode[id] = stmt
+            nodeId[node] = id
+            idNode[id] = node
             id
         }
+    }
+
+    private fun addNodeIfAbsent(s: Statement, d: Int): Int {
+        return addNodeIfAbsent(Node(s, d))
     }
 
     data class OutEdge(val next: Int, val label: Label)
@@ -101,24 +111,24 @@ class IntraGraph{
     ///
     /// Build intra-graph
     ///
-    fun addEdgeFromEntry(s: Statement, cond: Label = Label.T) {
-        addEdgeId(entryId, addNodeIfAbsent(s), cond)
+    fun addEdgeFromEntry(s: Statement, depth: Int, cond: Label = Label.T) {
+        addEdgeId(entryId, addNodeIfAbsent(s, depth), cond)
     }
 
-    fun addEdgeToExit(s: Statement, label : Label = Label.T) {
-        addEdgeId(addNodeIfAbsent(s), exitId, label)
+    fun addEdgeToExit(s: Statement, depth: Int, label : Label = Label.T) {
+        addEdgeId(addNodeIfAbsent(s, depth), exitId, label)
     }
 
     fun addEdgeFromEntryToExit(label: Label = Label.T) {
         addEdgeId(entryId, exitId, label)
     }
 
-    fun addEdgeToReturn(s: Statement, label: Label = Label.T) {
-        addEdgeId(addNodeIfAbsent(s), returnId, label)
+    fun addEdgeToReturn(s: Statement, depth: Int, label: Label = Label.T) {
+        addEdgeId(addNodeIfAbsent(s, depth), returnId, label)
     }
 
-    fun addEdgeToExcept(s: Statement, label: Label = Label.T) {
-        addEdgeId(addNodeIfAbsent(s), exceptId, label)
+    fun addEdgeToExcept(s: Statement, depth: Int, label: Label = Label.T) {
+        addEdgeId(addNodeIfAbsent(s, depth), exceptId, label)
     }
 
     ///
@@ -434,7 +444,7 @@ class IntraGraph{
                 if (effect) {
                     dfs(edge.next, path, true)
                 } else {
-                    dfs(edge.next, path, idNode.containsKey(cur) && containsUpdate(idNode[cur]!!))
+                    dfs(edge.next, path, idNode.containsKey(cur) && containsUpdate(idNode[cur]!!.statement))
                 }
                 path.removeLast()
             }
@@ -448,11 +458,11 @@ class IntraGraph{
         // From each committing node, traverse up to the entry.
         // There can be many paths leading to a committing node,
         // and only effectful ones are collected here.
-        for ((id, stmt) in idNode) {
+        for ((id, node) in idNode) {
             // FIXME: check if a method is committing precisely.
             // This should include wrappers.
             // FIXME: Should remove containsUpdate.
-            if (containsCommit(stmt) || containsUpdate(stmt)) {
+            if (containsCommit(node.statement) || containsUpdate(node.statement)) {
                 for (path in effectPathsFromEntry(id)) {
                     paths.putIfAbsent(id, mutableSetOf())
                     paths[id]!!.add(path)

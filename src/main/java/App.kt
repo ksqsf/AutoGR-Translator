@@ -253,12 +253,12 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
         override fun visit(expressionStmt: ExpressionStmt, arg: Void?): IntraGraph {
             debug(" ".repeat(depth) + ".Find expr " + expressionStmt)
             val g = IntraGraph()
-            g.addEdgeFromEntry(expressionStmt)
-            g.addEdgeToExit(expressionStmt)
+            g.addEdgeFromEntry(expressionStmt, depth)
+            g.addEdgeToExit(expressionStmt, depth)
             val exc = expressionStmt.expression.accept(exceptionVisitor, null)
             if (exc != null) {
                 for (e in exc) {
-                    g.addEdgeToExcept(expressionStmt, Label.Raise(e, expressionStmt.expression))
+                    g.addEdgeToExcept(expressionStmt, depth, Label.Raise(e, expressionStmt.expression))
                 }
             }
             return g
@@ -269,8 +269,8 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             val g = IntraGraph()
             val e = throwStmt.expression
             val ty = e.calculateResolvedType()
-            g.addEdgeFromEntry(throwStmt)
-            g.addEdgeToExcept(throwStmt, Label.Raise(ty, e))
+            g.addEdgeFromEntry(throwStmt, depth)
+            g.addEdgeToExcept(throwStmt, depth, Label.Raise(ty, e))
             return g
         }
 
@@ -321,8 +321,8 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
         override fun visit(returnStmt: ReturnStmt, arg: Void?): IntraGraph {
             debug(" ".repeat(depth) + ".Find return")
             val g = IntraGraph()
-            g.addEdgeFromEntry(returnStmt)
-            g.addEdgeToReturn(returnStmt)
+            g.addEdgeFromEntry(returnStmt, depth)
+            g.addEdgeToReturn(returnStmt, depth)
             return g
         }
     }

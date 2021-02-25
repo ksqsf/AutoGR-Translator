@@ -49,7 +49,7 @@ fun countMultipleCommits(analyzer: Analyzer): Set<QualifiedName> {
 
     fun containsCommitId(g: IntraGraph, id: Int): Boolean {
         val s = g.idNode[id]?: return false
-        return containsCommit(s)
+        return containsCommit(s.statement)
     }
 
     val result = mutableSetOf<QualifiedName>()

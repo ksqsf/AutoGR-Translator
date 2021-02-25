@@ -20,5 +20,5 @@ fun main() {
         }
     }
 
-    //println(generateRigi("HealthPlus", analyzer))
+    // println(generateRigi("HealthPlus", analyzer))
 }
