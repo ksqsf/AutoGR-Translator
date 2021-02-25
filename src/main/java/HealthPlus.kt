@@ -6,16 +6,14 @@ fun main() {
     // analyzer.graphviz()
     analyzer.loadSchema(ddl)
 
-    for (effect in analyzer.intergraph.effect) {
-        println("*** Effect $effect ***")
-        val g = analyzer.intragraphs[effect] ?: continue
+    for (effectMethodSig in analyzer.intergraph.effect) {
+        println("*** $effectMethodSig ***")
+        val g = analyzer.intragraphs[effectMethodSig] ?: continue
         val pathMap = g.collectEffectPaths()
         for ((commitId, pathSet) in pathMap) {
             for (path in pathSet) {
-                println("+ Starting from the entry to $commitId:")
-                for (edge in path) {
-                    println("  $edge")
-                }
+                val effect = Effect(path)
+                effect.tryToAnalyze(analyzer)
             }
         }
     }
