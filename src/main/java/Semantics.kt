@@ -67,16 +67,19 @@ fun containsRollback(s: Statement): Boolean {
 val knownSemantics = mapOf(
     "java.sql.Connection.prepareStatement" to ::prepareStatementSemantics,
     "java.sql.PreparedStatement.executeQuery" to ::executeQuerySemantics,
+    "java.sql.PreparedStatement.executeUpdate" to ::executeUpdateSemantics,
     "java.sql.PreparedStatement.setInt" to ::setParameterSemantics,
     "java.sql.PreparedStatement.setLong" to ::setParameterSemantics,
     "java.sql.PreparedStatement.setDate" to ::setParameterSemantics,
     "java.sql.PreparedStatement.setDouble" to ::setParameterSemantics,
     "java.sql.PreparedStatement.setFloat" to ::setParameterSemantics,
+    "java.sql.PreparedStatement.setString" to ::setParameterSemantics,
     "java.sql.ResultSet.getInt" to ::getColumnSemantics,
     "java.sql.ResultSet.getLong" to ::getColumnSemantics,
     "java.sql.ResultSet.getDate" to ::getColumnSemantics,
     "java.sql.ResultSet.getDouble" to ::getColumnSemantics,
     "java.sql.ResultSet.getFloat" to ::getColumnSemantics,
+    "java.sql.ResultSet.getString" to ::getColumnSemantics,
 )
 
 fun hasSemantics(methodDecl: ResolvedMethodDeclaration): Boolean {
@@ -106,7 +109,21 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
     assert(receiver is AbstractValue.SqlStmt)
     val receiver = receiver as AbstractValue.SqlStmt
     val sqlStr = receiver.sql
-    TODO()
+    // TODO
+    return AbstractValue.Unknown(self, self.calculateResolvedType())
+}
+
+fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    // Receiver is a prepared statement.
+    assert(receiver is AbstractValue.SqlStmt)
+    val receiver = receiver as AbstractValue.SqlStmt
+    val sqlStr = receiver.sql
+    println("[DBG] execute update $sqlStr, #params=${receiver.params.size}")
+    for (param in receiver.params) {
+        println("- $param")
+    }
+    // TODO
+    return AbstractValue.Unknown(self, self.calculateResolvedType())
 }
 
 fun setParameterSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
@@ -118,5 +135,6 @@ fun setParameterSemantics(self: Expression, env: Interpreter, receiver: Abstract
 }
 
 fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
-    TODO()
+    // TODO
+    return AbstractValue.Unknown(self, self.calculateResolvedType())
 }
