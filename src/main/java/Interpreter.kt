@@ -64,7 +64,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
     // If any expr is of unknown kind, AbstractValue.Null is returned.
     // Therefore, it's generally safe to unwrap the return value.
     private fun evalExpr(expr: Expression): AbstractValue? {
-        return expr.accept(object : GenericVisitorAdapter<AbstractValue?, Interpreter>() {
+        val result = expr.accept(object : GenericVisitorAdapter<AbstractValue?, Interpreter>() {
             // Null
             override fun visit(expr: NullLiteralExpr, arg: Interpreter): AbstractValue {
                 return AbstractValue.Null(expr, expr.calculateResolvedType())
@@ -95,18 +95,14 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
 
             // Variable
             override fun visit(expr: NameExpr, arg: Interpreter): AbstractValue {
-                return lookup(expr.nameAsString) ?: AbstractValue.Unknown(expr, expr.calculateResolvedType())
-            }
-            override fun visit(expr: VariableDeclarationExpr, arg: Interpreter): AbstractValue? {
-                for (declarator in expr.variables) {
-                    visit(declarator, arg)
-                }
-                return null
+                val varName = expr.nameAsString
+                return lookup(varName) ?: AbstractValue.Free(expr, expr.calculateResolvedType(), varName)
             }
             override fun visit(expr: VariableDeclarator, arg: Interpreter): AbstractValue? {
+                println("Variable declarator $expr")
                 val name = expr.nameAsString
                 val ty = expr.type.resolve()
-                val value = if (expr.initializer.isPresent) {
+                val value = if (expr.initializer.isEmpty) {
                     AbstractValue.Null(expr.nameAsExpression, ty)
                 } else {
                     evalExpr(expr.initializer.get())
@@ -200,13 +196,11 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
                 val receiver = evalExpr(scope)!!
                 val args = methodCallExpr.arguments.map { evalExpr(it)!! }
                 val methodDecl = methodCallExpr.resolve()
-                return AbstractValue.Call(methodCallExpr, methodCallExpr.calculateResolvedType(), receiver, args)
-                // TODO
-//                if (hasSemantics(methodDecl)) {
-//                    return dispatchSemantics(methodCallExpr, arg, receiver, args)
-//                } else {
-//                    return AbstractValue.Call(methodCallExpr, methodCallExpr.calculateResolvedType(), receiver, args)
-//                }
+                return if (hasSemantics(methodDecl)) {
+                    dispatchSemantics(methodCallExpr, arg, receiver, args)
+                } else {
+                    AbstractValue.Call(methodCallExpr, methodCallExpr.calculateResolvedType(), receiver, args)
+                }
             }
 
             override fun visit(conditionalExpr: ConditionalExpr, arg: Interpreter): AbstractValue {
@@ -278,6 +272,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
                 return AbstractValue.Unknown(expr, expr.calculateResolvedType())
             }
         }, this)
+        println("[DBG] Eval $expr = $result")
+        return result
     }
 
     private fun evalStatement(stmt: Statement) {
@@ -334,6 +330,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
      * This should be called before running any code, or scopes will be broken.
      */
     fun runClass(classDef: ClassOrInterfaceDeclaration) {
+        println("[DBG] Run class ${classDef.resolve().qualifiedName}")
+
         assert(depth == 0)
 
         classDef.accept(object : VoidVisitorAdapter<Interpreter>() {
@@ -342,6 +340,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
             }
 
             override fun visit(d: VariableDeclarator, arg: Interpreter) {
+                println("[DBG] Class field: $d")
+
                 val varName = d.nameAsString
                 val init = d.initializer
                 if (init.isEmpty) {
@@ -354,6 +354,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
     }
 
     fun run(path: IntraPath) {
+        println("[DBG] Run path ${path.final}: ${path.path}")
+
         for (edge in path.path) {
             evalNode(g.idNode[edge.next] ?: continue)
         }

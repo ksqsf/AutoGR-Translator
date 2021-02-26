@@ -8,5 +8,8 @@ class Effect(val sourcePath: IntraPath) {
         // 1. Build fields in the static class
         interpreter.runClass(sourcePath.intragraph.classDef)
 
+        // 2. Eval this path, and build an easier representation of its effect.
+        interpreter.run(sourcePath)
+
     }
 }
