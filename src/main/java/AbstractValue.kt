@@ -257,6 +257,17 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
         }
     }
 
+    // Variable names that occur free
+    data class Free(
+        val e: Expression,
+        val t: ResolvedType,
+        val name: String
+    ): AbstractValue(e, t) {
+        override fun toString(): String {
+            return "(free $name)"
+        }
+    }
+
     data class SqlStmt(
         val e: Expression,
         val t: ResolvedType,
