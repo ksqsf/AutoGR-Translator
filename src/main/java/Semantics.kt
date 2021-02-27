@@ -224,8 +224,10 @@ fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractVal
 
     val receiver = receiver!! as AbstractValue.ResultSet
     val idx = (args[0] as AbstractValue.Data).data as Long
-    val pair = receiver.columns[idx.toInt() - 1]
-    val value = AbstractValue.DbState(self, self.calculateResolvedType(), receiver, pair.first, pair.second)
+    val (column, aggKind) = receiver.columns[idx.toInt() - 1]
+    val value = AbstractValue.DbState(self, self.calculateResolvedType(), receiver, column, aggKind)
+    val argName = "${column.table.name}_${column.name}"
+    env.effect.addArgv(argName, column.type)
     return value
 }
 
