@@ -5,6 +5,7 @@ import com.github.javaparser.ast.expr.*
 import com.github.javaparser.ast.stmt.*
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter
+import java.lang.IllegalArgumentException
 
 typealias Scope = MutableMap<String, AbstractValue>
 
@@ -94,17 +95,20 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 val value = lookup(varName)
                 if (value == null) {
                     val javaType = expr.calculateResolvedType()
-                    val typeStr = javaType.toString()
-                    if (typeStr.contains("String")) {
-                        effect.addArgv(varName, Type.String)
-                    } else if (typeStr.contains("Double") || typeStr.contains("Float")) {
-                        effect.addArgv(varName, Type.Real)
-                    } else if (typeStr.contains("Date")) {
-                        effect.addArgv(varName, Type.Datetime)
-                    } else if (typeStr.contains("Int")) {
-                        effect.addArgv(varName, Type.Int)
-                    } else if (!typeStr.contains("Connection")) {
-                        println("[WARN-INT] unknown arg type $typeStr")
+                    // Free variables are arguments.
+                    if (!effect.argv.contains(varName)) {
+                        val typeStr = javaType.toString()
+                        if (typeStr.contains("String")) {
+                            effect.addArgv(varName, Type.String)
+                        } else if (typeStr.contains("Double") || typeStr.contains("Float")) {
+                            effect.addArgv(varName, Type.Real)
+                        } else if (typeStr.contains("Date")) {
+                            effect.addArgv(varName, Type.Datetime)
+                        } else if (typeStr.contains("Int")) {
+                            effect.addArgv(varName, Type.Int)
+                        } else if (!typeStr.contains("Connection")) {
+                            println("[WARN-INT] unknown arg type $typeStr")
+                        }
                     }
                     return AbstractValue.Free(expr, javaType, varName)
                 } else {
@@ -120,7 +124,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     evalExpr(expr.initializer.get())
                 }
                 putVariable(name, value!!)
-                println("[DBG] Var $name = ${value!!}")
+                println("[DBG] Var $name = $value")
                 return null
             }
             override fun visit(expr: AssignExpr, arg: Interpreter): AbstractValue {
@@ -149,8 +153,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 }
 
                 // expr must be `a = expr` now.
-                println("[DEBUG] target class ${expr.target::class}")
-                val value = evalExpr(expr)!!
+                assert(expr.target::class.toString().contains("NameExpr"))
+                val value = evalExpr(expr.value)!!
                 putVariable(expr.target.toString(), value)
                 return value
             }
@@ -163,7 +167,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     UnaryExpr.Operator.MINUS -> inner.negate(expr)
                     UnaryExpr.Operator.LOGICAL_COMPLEMENT -> inner.not(expr)
                     else -> {
-                        println("[WARN] unary operator ${expr.operator} unsupported");
+                        println("[WARN] unary operator ${expr.operator} unsupported")
                         AbstractValue.Unknown(expr, expr.calculateResolvedType())
                     }
                 }
@@ -189,7 +193,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     BinaryExpr.Operator.LESS -> left.lt(expr, right)
                     BinaryExpr.Operator.LESS_EQUALS -> left.le(expr, right)
                     else -> {
-                        println("[WARN] binary operator ${expr.operator} unsupported");
+                        println("[WARN] binary operator ${expr.operator} unsupported")
                         AbstractValue.Unknown(expr, expr.calculateResolvedType())
                     }
                 }
@@ -340,13 +344,18 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
     private fun evalCond(cond: Expression, not: Boolean = false) {
         val value = evalExpr(cond)
         when (value) {
+            null -> {
+                throw IllegalArgumentException("Condition `$cond` is not a boolean expression")
+            }
             is AbstractValue.DbNotNil -> {
                 if (not)
                     value.reverse()
-                println("[DBG] condition: $value")
+                println("[DB] condition: $value")
+                effect.addCondition(value)
             }
             else -> {
-                println("[WARN] can't interpret this condition, assuming true")
+                println("[COND] condition: $cond")
+                effect.addCondition(value)
             }
         }
     }
