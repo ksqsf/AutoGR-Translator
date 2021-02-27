@@ -86,6 +86,8 @@ val knownSemantics = mapOf(
     "java.sql.ResultSet.getDouble" to ::getColumnSemantics,
     "java.sql.ResultSet.getFloat" to ::getColumnSemantics,
     "java.sql.ResultSet.getString" to ::getColumnSemantics,
+    "java.sql.ResultSet.first" to ::notNilSemantics,
+    "java.sql.ResultSet.next" to ::notNilSemantics,
 )
 
 fun hasSemantics(methodDecl: ResolvedMethodDeclaration): Boolean {
@@ -177,7 +179,6 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
                 }
             }
 
-            println("")
             return rs
         }
         else -> {
@@ -226,4 +227,14 @@ fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractVal
     val pair = receiver.columns[idx.toInt() - 1]
     val value = AbstractValue.DbState(self, self.calculateResolvedType(), receiver, pair.first, pair.second)
     return value
+}
+
+fun notNilSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    if (receiver !is AbstractValue.ResultSet) {
+        println("[ERR] resultset was not successfully analyzed")
+        return AbstractValue.Unknown(self, self.calculateResolvedType())
+    }
+
+    val receiver = receiver!! as AbstractValue.ResultSet
+    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver)
 }
