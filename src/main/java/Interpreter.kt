@@ -26,25 +26,20 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
 
     fun pushScope() {
         scope.add(mutableMapOf())
+        depth++
     }
 
     fun popScope() {
         scope.removeLast()
+        depth--
     }
 
     fun adjustScope(dest: Int) {
-        when {
-            dest > depth -> {
-                assert(dest == depth + 1)
-                pushScope()
-            }
-            dest < depth -> {
-                assert(dest == depth - 1)
-                popScope()
-            }
-            else -> {
-                // Do nothing
-            }
+        while (dest > depth) {
+            pushScope()
+        }
+        while (dest < depth) {
+            popScope()
         }
     }
 
