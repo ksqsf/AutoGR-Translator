@@ -1,17 +1,24 @@
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.resolution.types.ResolvedType
+import net.sf.jsqlparser.expression.JdbcParameter
+import net.sf.jsqlparser.expression.operators.relational.EqualsTo
 import net.sf.jsqlparser.statement.select.Join
 import net.sf.jsqlparser.statement.select.Limit
 import net.sf.jsqlparser.statement.select.PlainSelect
+import java.lang.IllegalArgumentException
 import java.lang.StringBuilder
 
-sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) {
+sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?) {
     override fun toString(): String {
         return "(Value ${this::class})"
     }
 
+    open fun toRigi(): String {
+        throw IllegalArgumentException("This type can't be converted to Rigi")
+    }
+
     open fun guessSql(): String {
-        TODO("shouldn't work")
+        throw IllegalArgumentException("AbstractValue of type ${this::class} doesn't have SQL guesses")
     }
 
     //
@@ -259,6 +266,17 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
                 return "?"
             }
         }
+
+        override fun toRigi(): String {
+            when (data) {
+                is String -> return "'${quote(data)}'"
+                is Int -> return "$data"
+                is Long -> return "$data"
+                is Double -> return "$data"
+                is Float -> return "$data"
+                else -> return super.toRigi()
+            }
+        }
     }
 
     // Variable names that occur free
@@ -270,6 +288,10 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
         override fun toString(): String {
             return "(free $name)"
         }
+
+        override fun toRigi(): String {
+            return "argv['@OP@']['$name']"
+        }
     }
 
     data class SqlStmt(
@@ -277,9 +299,9 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
         val t: ResolvedType,
         val sql: String
     ): AbstractValue(e, t) {
-        val params = mutableMapOf<Int, Any>()
+        val params = mutableMapOf<Int, AbstractValue>()
 
-        fun setParameter(i: Int, data: Any) {
+        fun setParameter(i: Int, data: AbstractValue) {
             params[i] = data
         }
     }
@@ -287,6 +309,7 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
     data class ResultSet(
         val e: Expression,
         val t: ResolvedType,
+        val stmt: SqlStmt,
         val select: PlainSelect,
     ): AbstractValue(e, t) {
         val columns = mutableListOf<Pair<Column, AggregateKind>>()
@@ -294,6 +317,7 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
         val limit: Limit? = select.limit
         val hasJoin = joins?.isNotEmpty() ?: false
         val hasLimit = limit != null
+        var tables = listOf<Table>()
 
         fun addColumn(column: Column) {
             columns.add(Pair(column, AggregateKind.ID))
@@ -317,20 +341,24 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
                     }
                 }
             }
-            sb.append(")")
+            sb.append("; ${select.where})")
             return sb.toString()
         }
     }
 
     data class DbState(
-        val e: Expression,
-        val t: ResolvedType,
+        val e: Expression?,
+        val t: ResolvedType?,
         val query: ResultSet,
         val column: Column,
         val aggregateKind: AggregateKind
     ): AbstractValue(e, t) {
         override fun toString(): String {
             return "(db ${column.table.name}.${column.name})"
+        }
+
+        override fun toRigi(): String {
+            return "${column.table.name}_${column.name}"
         }
     }
 
@@ -340,15 +368,40 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
         val query: ResultSet,
     ): AbstractValue(e, t) {
         var reversed = false
+
         fun reverse() {
             reversed = !reversed
         }
+
         override fun toString(): String {
             if (reversed) {
                 return "(Nil $query)"
             } else {
                 return "(notNil $query)"
             }
+        }
+
+        override fun not(expr: Expression): AbstractValue {
+            val clone = DbNotNil(e, t, query)
+            clone.reverse()
+            return clone
+        }
+
+        override fun toRigi(): String {
+            val expect = if (reversed) { "False" } else { "True" }
+            val where = query.select.where
+            val parts = mutableListOf<String>()
+            if (where is EqualsTo && where.rightExpression is JdbcParameter) {
+                val right = where.rightExpression as JdbcParameter
+                val index = right.index
+                val value = query.stmt.params[index]!!
+                val left = where.leftExpression.toString()
+                assert(!left.contains("."))
+                parts.add("'$left': ${value.toRigi()}")
+            } else if (where != null) {
+                println("[ERR] don't know $where (${where::class})")
+            }
+            return "(state['TABLE_${query.tables[0]}'].notNil({${parts.joinToString(", ")}}) == $expect)"
         }
     }
 
@@ -372,6 +425,10 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
     ): AbstractValue(e, t) {
         override fun toString(): String {
             return "($op $value)"
+        }
+
+        override fun toRigi(): String {
+            return "$op(${value.toRigi()})"
         }
     }
 
