@@ -334,6 +334,24 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
         }
     }
 
+    data class DbNotNil(
+        val e: Expression,
+        val t: ResolvedType,
+        val query: ResultSet,
+    ): AbstractValue(e, t) {
+        var reversed = false
+        fun reverse() {
+            reversed = !reversed
+        }
+        override fun toString(): String {
+            if (reversed) {
+                return "(Nil $query)"
+            } else {
+                return "(notNil $query)"
+            }
+        }
+    }
+
     // Method call or object construction
     data class Call(
         val e: Expression,
