@@ -92,9 +92,9 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             override fun visit(expr: NameExpr, arg: Interpreter): AbstractValue {
                 val varName = expr.nameAsString
                 val value = lookup(varName)
-                val javaType = expr.calculateResolvedType()
-                val typeStr = javaType.toString()
                 if (value == null) {
+                    val javaType = expr.calculateResolvedType()
+                    val typeStr = javaType.toString()
                     if (typeStr.contains("String")) {
                         effect.addArgv(varName, Type.String)
                     } else if (typeStr.contains("Double") || typeStr.contains("Float")) {
@@ -112,7 +112,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 }
             }
             override fun visit(expr: VariableDeclarator, arg: Interpreter): AbstractValue? {
-                println("Variable declarator $expr")
                 val name = expr.nameAsString
                 val ty = expr.type.resolve()
                 val value = if (expr.initializer.isEmpty) {
@@ -121,6 +120,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     evalExpr(expr.initializer.get())
                 }
                 putVariable(name, value!!)
+                println("[DBG] Var $name = ${value!!}")
                 return null
             }
             override fun visit(expr: AssignExpr, arg: Interpreter): AbstractValue {
@@ -337,6 +337,20 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         evalStatement(node.statement)
     }
 
+    private fun evalCond(cond: Expression, not: Boolean = false) {
+        val value = evalExpr(cond)
+        when (value) {
+            is AbstractValue.DbNotNil -> {
+                if (not)
+                    value.reverse()
+                println("[DBG] condition: $value")
+            }
+            else -> {
+                println("[WARN] can't interpret this condition, assuming true")
+            }
+        }
+    }
+
     /**
      * Run class-wise code like field definitions.
      *
@@ -370,7 +384,22 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         println("[DBG] Run path ${path.final}: ${path.path}")
 
         for (edge in path.path) {
-            evalNode(g.idNode[edge.next] ?: continue)
+            // println("[RUN] edge = ${edge}")
+            if (g.idNode[edge.next] != null) {
+                evalNode(g.idNode[edge.next]!!)
+            }
+            when (edge.label) {
+                is Label.T -> {}
+                is Label.Br -> {
+                    evalCond(edge.label.expr)
+                }
+                is Label.BrNot -> {
+                    evalCond(edge.label.expr, not = true)
+                }
+                else -> {
+                    println("[WARN] unknown label: ${edge.label}, assuming to be true")
+                }
+            }
         }
         val finalNode = g.idNode[path.final]
         if (finalNode != null)
