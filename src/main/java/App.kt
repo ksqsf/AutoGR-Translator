@@ -22,7 +22,7 @@ import java.nio.file.Path
 typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
 
-class Analyzer(projectRoot: String) {
+class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
     val intergraph: InterGraph
     val intragraphs: IntraGraphSet
     val schema = Schema()
@@ -57,10 +57,12 @@ class Analyzer(projectRoot: String) {
 
         // Step 1. Construct interprocedural call graph for the project
         intergraph = InterGraph()
-        for (file in projectFiles) {
-            println("Intergraph: ${file.storage.get().fileName}")
-            val fileG = buildInterGraph(file)
-            intergraph.union(fileG)
+        if (buildInterGraph) {
+            for (file in projectFiles) {
+                println("Intergraph: ${file.storage.get().fileName}")
+                val fileG = buildInterGraph(file)
+                intergraph.union(fileG)
+            }
         }
         val basicEffects = listOf(
             "java.sql.PreparedStatement.executeUpdate",
