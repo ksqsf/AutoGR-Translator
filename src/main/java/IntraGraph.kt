@@ -36,6 +36,11 @@ sealed class Label {
             return quote(expr.toString())
         }
     }
+    data class BrNot(val expr: Expression): Label() {
+        override fun toString(): String {
+            return "!(${quote(expr.toString())})"
+        }
+    }
     data class Raise(val ty: ResolvedType, val expr: Expression?): Label() {
         override fun toString(): String {
             return "ex(${quote(ty.describe())} $expr)"

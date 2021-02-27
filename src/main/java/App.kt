@@ -192,7 +192,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
                 g.addEdgeId(g.entryId, bodyG.entryId)
             } else {
                 g.addEdgeId(g.entryId, bodyG.entryId, Label.Br(cond))
-                g.addEdgeFromEntryToExit(Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
+                g.addEdgeFromEntryToExit(Label.BrNot(cond))
             }
             g.addEdgeId(bodyG.exitId, g.entryId)
             g.addEdgeId(bodyG.breakId, g.exitId)
@@ -213,7 +213,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
                 g.addEdgeId(
                     bodyG.exitId,
                     g.exitId,
-                    Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT))
+                    Label.BrNot(cond)
                 )
             }
             g.addEdgeId(bodyG.continueId, bodyG.exitId)
@@ -244,10 +244,10 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
                 val elseStmt = ifStmt.elseStmt.get()
                 val elseG = elseStmt.accept(this, classDef)
                 g.addBetweenEntryAndExit(thenG, Label.Br(cond))
-                g.addBetweenEntryAndExit(elseG, Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
+                g.addBetweenEntryAndExit(elseG, Label.BrNot(cond))
             } else {
                 g.addBetweenEntryAndExit(thenG, Label.Br(cond))
-                g.addEdgeFromEntryToExit(Label.Br(UnaryExpr(cond, UnaryExpr.Operator.LOGICAL_COMPLEMENT)))
+                g.addEdgeFromEntryToExit(Label.BrNot(cond))
             }
             return g
         }
