@@ -42,11 +42,19 @@ class Schema {
 }
 
 class Table(val def: CreateTable) {
-    val columns = def.columnDefinitions.map { Column(it) }
+    val columns = def.columnDefinitions.map { Column(it, this) }
     val name = def.table.name
 
     fun get(i: Int): Column {
-        return columns.get(i)
+        return columns[i]
+    }
+
+    fun get(name: String): Column? {
+        for (col in columns) {
+            if (col.name == name)
+                return col
+        }
+        return null
     }
 
     override fun toString(): String {
@@ -54,9 +62,18 @@ class Table(val def: CreateTable) {
     }
 }
 
-class Column(val def: ColumnDefinition) {
+class Column(val def: ColumnDefinition, val table: Table) {
     val name: String = def.columnName
     val type = convertType()
+    var pkey = false
+
+    fun setPKey() {
+        pkey = true
+    }
+
+    override fun toString(): String {
+        return "${table.name}.$name"
+    }
 
     private fun convertType(): Type {
         val raw = def.colDataType.dataType.toLowerCase()
