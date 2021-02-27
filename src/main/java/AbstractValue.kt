@@ -325,6 +325,7 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
     data class DbState(
         val e: Expression,
         val t: ResolvedType,
+        val query: ResultSet,
         val column: Column,
         val aggregateKind: AggregateKind
     ): AbstractValue(e, t) {
