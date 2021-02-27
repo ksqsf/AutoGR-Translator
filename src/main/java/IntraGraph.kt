@@ -13,12 +13,6 @@ data class IntraPath(val path: List<IntraGraph.OutEdge>, val intragraph: IntraGr
     }
 }
 
-fun quote(str: String): String {
-    return str.replace("\\", "\\\\")
-            .replace("\n", "\\n")
-            .replace("\"", "\\\"")
-}
-
 data class Node(val statement: Statement, val scopingDepth: Int) {
     override fun toString(): String {
         return "$statement @ $scopingDepth"
