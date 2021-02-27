@@ -1,6 +1,7 @@
 import net.sf.jsqlparser.parser.CCJSqlParser
 import net.sf.jsqlparser.statement.create.table.ColumnDefinition
 import net.sf.jsqlparser.statement.create.table.CreateTable
+import net.sf.jsqlparser.statement.create.table.NamedConstraint
 import java.io.File
 
 class Schema {
@@ -32,8 +33,19 @@ class Schema {
             if (stmt is CreateTable) {
                 val table = Table(stmt)
                 println("- Table: ${table.name}")
+                // add columns
                 for (col in table.columns) {
                     println("  ${col.name}; ${col.type}; ${col.def.columnSpecs}")
+                }
+                // set primary key
+                if (stmt.indexes != null) {
+                    for (index in stmt.indexes) {
+                        if (index is NamedConstraint && index.type == "PRIMARY KEY") {
+                            for (pcol in index.columns) {
+                                table.get(pcol.toString())!!.setPKey()
+                            }
+                        }
+                    }
                 }
                 add(table)
             }

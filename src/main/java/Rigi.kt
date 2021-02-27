@@ -39,10 +39,16 @@ fun generateRigiDBSchema(schema: Schema): String {
     for (table in schema.getTables()) {
         sb.append("\n")
         sb.append("$table = Table('$table')\n")
+        val pkeys = mutableListOf<Column>()
         for (col in table.columns) {
             sb.append("$table.addAttr('${col.name}', Table.Type.${col.type.toString().toUpperCase()})\n")
+            if (col.pkey) {
+                pkeys.add(col)
+            }
         }
-        // TODO: set PKey
+        for (pk in pkeys) {
+            sb.append("$table.setPKey('${pk.name}')\n")
+        }
         sb.append("$table.build()\n")
         sb.append("\n")
     }
