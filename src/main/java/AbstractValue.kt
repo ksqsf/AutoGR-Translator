@@ -1,5 +1,9 @@
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.resolution.types.ResolvedType
+import net.sf.jsqlparser.statement.select.Join
+import net.sf.jsqlparser.statement.select.Limit
+import net.sf.jsqlparser.statement.select.PlainSelect
+import java.lang.StringBuilder
 
 sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) {
     override fun toString(): String {
@@ -7,7 +11,7 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
     }
 
     open fun guessSql(): String {
-        return "?"
+        TODO("shouldn't work")
     }
 
     //
@@ -282,9 +286,51 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
 
     data class ResultSet(
         val e: Expression,
-        val t: ResolvedType
+        val t: ResolvedType,
+        val select: PlainSelect,
     ): AbstractValue(e, t) {
+        val columns = mutableListOf<Pair<Column, AggregateKind>>()
+        val joins: List<Join>? = select.joins
+        val limit: Limit? = select.limit
+        val hasJoin = joins?.isNotEmpty() ?: false
+        val hasLimit = limit != null
 
+        fun addColumn(column: Column) {
+            columns.add(Pair(column, AggregateKind.ID))
+        }
+
+        fun addAggregate(column: Column, kind: AggregateKind) {
+            columns.add(Pair(column, kind))
+        }
+
+        override fun toString(): String {
+            val sb = StringBuilder()
+            sb.append("(resultset")
+            for (pair in columns) {
+                sb.append(' ')
+                when (pair.second) {
+                    AggregateKind.ID->{
+                        sb.append("${pair.first.table.name}.${pair.first.name}")
+                    }
+                    AggregateKind.MAX->{
+                        sb.append("MAX(${pair.first.table.name}.${pair.first.name})")
+                    }
+                }
+            }
+            sb.append(")")
+            return sb.toString()
+        }
+    }
+
+    data class DbState(
+        val e: Expression,
+        val t: ResolvedType,
+        val column: Column,
+        val aggregateKind: AggregateKind
+    ): AbstractValue(e, t) {
+        override fun toString(): String {
+            return "(db ${column.table.name}.${column.name})"
+        }
     }
 
     // Method call or object construction
@@ -341,6 +387,11 @@ sealed class AbstractValue(val expr : Expression, val staticType: ResolvedType) 
             }
         }
     }
+}
+
+enum class AggregateKind {
+    ID,
+    MAX,
 }
 
 enum class Operator {
