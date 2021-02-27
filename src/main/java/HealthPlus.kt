@@ -14,6 +14,7 @@ fun main() {
             for (path in pathSet) {
                 val effect = Effect(path)
                 effect.tryToAnalyze(analyzer)
+                println("argv: ${effect.argv}")
             }
         }
     }

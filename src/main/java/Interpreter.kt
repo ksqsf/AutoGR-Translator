@@ -17,7 +17,7 @@ fun emptyScope(): Scope {
  *
  * Only interpret the graph on all paths leading to an effectual Database.commit.
  */
-class Interpreter(val g: IntraGraph, val schema: Schema) {
+class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
     var depth = 0
     var returnValue: AbstractValue? = null
 
@@ -91,7 +91,25 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
             // Variable
             override fun visit(expr: NameExpr, arg: Interpreter): AbstractValue {
                 val varName = expr.nameAsString
-                return lookup(varName) ?: AbstractValue.Free(expr, expr.calculateResolvedType(), varName)
+                val value = lookup(varName)
+                val javaType = expr.calculateResolvedType()
+                val typeStr = javaType.toString()
+                if (value == null) {
+                    if (typeStr.contains("String")) {
+                        effect.addArgv(varName, Type.String)
+                    } else if (typeStr.contains("Double") || typeStr.contains("Float")) {
+                        effect.addArgv(varName, Type.Real)
+                    } else if (typeStr.contains("Date")) {
+                        effect.addArgv(varName, Type.Datetime)
+                    } else if (typeStr.contains("Int")) {
+                        effect.addArgv(varName, Type.Int)
+                    } else if (!typeStr.contains("Connection")) {
+                        println("[WARN-INT] unknown arg type $typeStr")
+                    }
+                    return AbstractValue.Free(expr, javaType, varName)
+                } else {
+                    return value
+                }
             }
             override fun visit(expr: VariableDeclarator, arg: Interpreter): AbstractValue? {
                 println("Variable declarator $expr")
@@ -267,7 +285,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema) {
                 return AbstractValue.Unknown(expr, expr.calculateResolvedType())
             }
         }, this)
-        println("[DBG] Eval $expr = $result")
+        // println("[DBG] Eval $expr = $result")
         return result
     }
 
