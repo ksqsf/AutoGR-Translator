@@ -5,8 +5,11 @@ import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo
 import net.sf.jsqlparser.parser.CCJSqlParserUtil
+import net.sf.jsqlparser.statement.delete.Delete
+import net.sf.jsqlparser.statement.insert.Insert
 import net.sf.jsqlparser.statement.select.PlainSelect
 import net.sf.jsqlparser.statement.select.Select
+import net.sf.jsqlparser.statement.update.Update
 import net.sf.jsqlparser.util.TablesNamesFinder
 
 val basicUpdates = setOf(
@@ -130,7 +133,8 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
             val items = selectBody.selectItems
             val tables = TablesNamesFinder().getTableList(sql)
 
-            val rs = AbstractValue.ResultSet(self, self.calculateResolvedType(), selectBody)
+            val rs = AbstractValue.ResultSet(self, self.calculateResolvedType(), receiver, selectBody)
+            rs.tables = tables.map { env.schema.get(it)!! }.toList()
 
             // Collect columns
             if (items.size == 1) {
@@ -162,13 +166,26 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
             when (where) {
                 is EqualsTo -> {
                     val left = where.leftExpression.toString()
+                    val rightExpr = where.rightExpression
                     if (!left.contains(".")) {
+                        // This is a simple query like A = B
                         val tblName = selectBody.fromItem.toString()
                         assert(!tblName.contains(","))
-                        env.schema.get(tblName)!!.get(left)!!.setPKey()
+                        val leftCol = env.schema.get(tblName)!!.get(left)!!
+                        // NOTE: HealthPlus only has "SELECT ... WHERE X = ?"
+                        // TODO: locator
+//                        val rightCol = env.schema.get(tblName)!!.get(right)!!
+                        leftCol.setPKey()
+//                        rs.locators.add(Locator.Eq(leftCol, rightCol))
                     } else {
-                        val (tblName, colName) = left.split(".")
-                        env.schema.get(tables[0]!!)!!.get(left)!!.setPKey()
+                        // TODO: locator
+                        // INNER JOIN, t1.x = t2.y
+                        val (tblName1, colName1) = left.split(".")
+                        val (tblName2, colName2) = rightExpr.toString().split(".")
+                        val leftCol = env.schema.get(tblName1)!!.get(colName1)!!
+//                        val rightCol = env.schema.get(tblName2)!!.get(colName2)!!
+                        leftCol.setPKey()
+//                        rs.locators.add(Locator.Eq(leftCol, rightCol))
                     }
                 }
                 null -> {
@@ -197,7 +214,28 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
     for (param in receiver.params) {
         println("- $param")
     }
-    // TODO: record SOP
+
+    if (sqlStr.contains("now(", ignoreCase = true)) {
+        env.effect.addArgv("now", Type.Datetime)
+    }
+
+    val sql = CCJSqlParserUtil.parse(sqlStr)!!
+    when (sql) {
+        is Update -> {
+            println("[update] Update $sql, cols=${sql.columns}, exprs=${sql.expressions}, from=${sql.fromItem}, tbl=${sql.table}")
+        }
+        is Insert -> {
+            val table = env.schema.get(sql.table.name)!!
+            println("[update] Insert $sql, cols=${sql.columns}, table=${sql.table}, itemL=${sql.itemsList}, exprL=${sql.setExpressionList}")
+        }
+        is Delete -> {
+            println("[update] Delete $sql, tbl=${sql.tables}, tbls=${sql.tables}, where=${sql.where}")
+        }
+        else -> {
+            println("[ERR] Unknown type of update $sql")
+        }
+    }
+
     return AbstractValue.Unknown(self, self.calculateResolvedType())
 }
 

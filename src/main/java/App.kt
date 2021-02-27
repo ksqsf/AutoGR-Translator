@@ -131,7 +131,6 @@ fun main() {
         println(g.collectEffectPaths())
     }
 
-    println(generateRigi("HealthPlus", analyzer))
 }
 
 /**
