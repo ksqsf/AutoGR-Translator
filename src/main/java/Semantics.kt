@@ -3,6 +3,7 @@ import com.github.javaparser.ast.expr.MethodCallExpr
 import com.github.javaparser.ast.stmt.Statement
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration
+import net.sf.jsqlparser.expression.JdbcParameter
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo
 import net.sf.jsqlparser.parser.CCJSqlParserUtil
 import net.sf.jsqlparser.statement.delete.Delete
@@ -229,7 +230,22 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             println("[update] Insert $sql, cols=${sql.columns}, table=${sql.table}, itemL=${sql.itemsList}, exprL=${sql.setExpressionList}")
         }
         is Delete -> {
-            println("[update] Delete $sql, tbl=${sql.tables}, tbls=${sql.tables}, where=${sql.where}")
+            println("[update] Delete $sql, tbl=${sql.table}, tbls=${sql.tables}, where=${sql.where}")
+            val table = env.schema.get(sql.table.name)!!
+            val locators = mutableMapOf<Column, AbstractValue>()
+            val where = sql.where
+            if (where is EqualsTo) {
+                // FIXME: only WHERE xx_id = ? is supported here
+                val left = where.leftExpression.toString()
+                val col = table.get(left)!!
+                val rightIdx = (where.rightExpression as JdbcParameter).index
+                val right = receiver.params[rightIdx]!!
+                locators[col] = right
+            } else {
+                println("[ERR] unknown where $where of ${where::class}")
+            }
+            val shadow = Shadow.Delete(table, locators)
+            env.effect.addShadow(shadow)
         }
         else -> {
             println("[ERR] Unknown type of update $sql")

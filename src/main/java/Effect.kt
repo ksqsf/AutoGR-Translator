@@ -23,6 +23,7 @@ class Effect(analyzer: Analyzer, val sourcePath: IntraPath) {
     }
 
     fun addShadow(shadow: Shadow) {
+        println("[DBG] add shadow $shadow")
         shadows.add(shadow)
     }
 
@@ -39,7 +40,20 @@ class Effect(analyzer: Analyzer, val sourcePath: IntraPath) {
 }
 
 sealed class Shadow {
-    data class Delete(val table: Table, val where: Expression)
-    data class Insert(val table: Table, val values: Map<Column, AbstractValue?>)
-    data class Update(val table: Table, val where: Expression, val values: Map<Column, AbstractValue?>)
+    data class Delete(val table: Table, val locators: Map<Column, AbstractValue>): Shadow() {
+        override fun toString(): String {
+            return "(DELETE $table $locators)"
+        }
+
+    }
+    data class Insert(val table: Table, val values: Map<Column, AbstractValue?>): Shadow() {
+        override fun toString(): String {
+            return "(INSERT $table $values)"
+        }
+    }
+    data class Update(val table: Table, val locators: Map<Column, AbstractValue>, val values: Map<Column, AbstractValue?>): Shadow() {
+        override fun toString(): String {
+            return "(UPDATE $table $values $locators)"
+        }
+    }
 }

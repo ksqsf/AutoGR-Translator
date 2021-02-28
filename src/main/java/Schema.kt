@@ -78,6 +78,7 @@ class Column(val def: ColumnDefinition, val table: Table) {
     val name: String = def.columnName
     val type = convertType()
     var pkey = false
+    val qualifiedName = "${table.name}_${name}"
 
     fun setPKey() {
         pkey = true
