@@ -1,4 +1,3 @@
-import net.sf.jsqlparser.expression.operators.relational.EqualsTo
 import java.lang.StringBuilder
 
 fun generateRigi(appName: String, analyzer: Analyzer, effectMap: Map<QualifiedName, Set<Effect>>): String {
@@ -143,9 +142,54 @@ fun generateCondSop(effect: Effect, suffix: Int): String {
 fun generateSop(effect: Effect, suffix: Int): String {
     val sb = StringBuilder()
     sb.append("    def sop$suffix(self, state, argv):\n")
+
+    fun locatorsToRigi(locators: Map<Column, AbstractValue>): String {
+        val dict = locators.map {
+            "'${it.key.name}': ${it.value.toRigi()}"
+        }
+        val lb = StringBuilder()
+        lb.append("{")
+        lb.append(dict.joinToString(","))
+        lb.append("}")
+        return lb.toString()
+    }
+
     // Read arguments
     for ((argName, _) in effect.argv) {
         sb.append("        $argName = argv['@OP@']['$argName']\n")
+    }
+    // Generate sops
+    for (shadow in effect.shadows) {
+        when (shadow) {
+            is Shadow.Delete -> {
+                sb.append("        state['TABLE_${shadow.table.name}'].delete(${locatorsToRigi(shadow.locators)})\n")
+            }
+            is Shadow.Update -> {
+                val table = shadow.table
+                val locatorStr = locatorsToRigi(shadow.locators)
+                // Read old values
+                for (col in table.columns) {
+                    sb.append("        ${col.qualifiedName} = state['TABLE_${table.name}'].get($locatorStr)\n")
+                }
+                // Update values
+                for ((col, newValue) in shadow.values) {
+                    val newValStr = newValue?.toRigi() ?: col.qualifiedName
+                    sb.append("        ${col.qualifiedName} = $newValStr\n")
+                }
+                // Call update with new values
+                sb.append("        state['TABLE_${table.name}'].update($locatorStr, ${table.columns.map { it.qualifiedName }.joinToString(", ")})\n")
+            }
+            is Shadow.Insert -> {
+                val table = shadow.table
+                for ((col, value) in shadow.values) {
+                    if (value == null) {
+                        println("[DBG] null value $shadow")
+                    }
+                    sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
+                }
+                sb.append("        state['TABLE_${table.name}'].insert(${table.columns.map { it.qualifiedName }.joinToString(",")})\n")
+            }
+        }
     }
     return sb.toString()
 }
