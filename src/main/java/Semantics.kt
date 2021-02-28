@@ -4,6 +4,9 @@ import com.github.javaparser.ast.stmt.Statement
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration
 import net.sf.jsqlparser.expression.JdbcParameter
+import net.sf.jsqlparser.expression.operators.arithmetic.Addition
+import net.sf.jsqlparser.expression.operators.arithmetic.Subtraction
+import net.sf.jsqlparser.expression.operators.conditional.AndExpression
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo
 import net.sf.jsqlparser.expression.operators.relational.ExpressionList
 import net.sf.jsqlparser.parser.CCJSqlParserUtil
@@ -234,11 +237,11 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             val valueMap = mutableMapOf<Column, AbstractValue>()
             if (sql.columns == null) {
                 for ((col, expr) in table.columns.zip(exprs.expressions)) {
-                    valueMap[col] = evalSqlExpr(expr, receiver)
+                    valueMap[col] = evalSqlExpr(expr, receiver, table)
                 }
             } else {
                 for ((col, expr) in sql.columns.zip(exprs.expressions)) {
-                    valueMap[table.get(col.columnName)!!] = evalSqlExpr(expr, receiver)
+                    valueMap[table.get(col.columnName)!!] = evalSqlExpr(expr, receiver, table)
                 }
             }
             val shadow = Shadow.Insert(table, valueMap)
@@ -247,18 +250,7 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
         is Delete -> {
             println("[update] Delete $sql, tbl=${sql.table}, tbls=${sql.tables}, where=${sql.where}")
             val table = env.schema.get(sql.table.name)!!
-            val locators = mutableMapOf<Column, AbstractValue>()
-            val where = sql.where
-            if (where is EqualsTo) {
-                // FIXME: only WHERE xx_id = ? is supported here
-                val left = where.leftExpression.toString()
-                val col = table.get(left)!!
-                val rightIdx = (where.rightExpression as JdbcParameter).index
-                val right = receiver.params[rightIdx]!!
-                locators[col] = right
-            } else {
-                println("[ERR] unknown where $where of ${where::class}")
-            }
+            val locators = whereToLocators(receiver, table, sql.where)
             val shadow = Shadow.Delete(table, locators)
             env.effect.addShadow(shadow)
         }
@@ -310,18 +302,59 @@ fun notNilSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?
     return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver)
 }
 
-fun evalSqlExpr(expr: net.sf.jsqlparser.expression.Expression, sql: AbstractValue.SqlStmt): AbstractValue {
+fun whereToLocators(sql: AbstractValue.SqlStmt, table: Table, where: net.sf.jsqlparser.expression.Expression): Map<Column, AbstractValue> {
+    when (where) {
+        is EqualsTo -> {
+            val locators = mutableMapOf<Column, AbstractValue>()
+
+            // FIXME: only WHERE xx_id = ? is supported here
+            val left = where.leftExpression.toString().substringAfter(".")
+            if (left.contains("."))
+                assert(left.substringBefore(".") == table.name)
+            val col = table.get(left)!!
+            val right = evalSqlExpr(where.rightExpression, sql, table)
+            locators[col] = right
+
+            return locators
+        }
+        is AndExpression -> {
+            val leftLocators = whereToLocators(sql, table, where.leftExpression)
+            val rightLocators = whereToLocators(sql, table, where.rightExpression)
+            return leftLocators + rightLocators
+        }
+        else -> {
+            throw IllegalArgumentException("where clause is not supported $where")
+        }
+    }
+}
+
+fun evalSqlExpr(expr: net.sf.jsqlparser.expression.Expression, sql: AbstractValue.SqlStmt, table: Table): AbstractValue {
     val exprStr = expr.toString()
     if (exprStr.startsWith("'")) {
         return AbstractValue.Data(null, null, exprStr.substringAfter("'").substringBefore("'"))
     } else if (Regex("\\d+").matches(exprStr)) {
         return AbstractValue.Data(null, null, exprStr.toInt())
-    } else if (exprStr.contains("now", ignoreCase = true)) {
+    } else if (Regex("[nN][oO][wW] *\\( *\\)").matches(exprStr)) {
         return AbstractValue.Free(null, null, "now")
     } else if (exprStr.contains("null", ignoreCase = true)) {
         return AbstractValue.Null(null, null)
     } else if (exprStr == "?") {
         return sql.params[(expr as JdbcParameter).index]!!
+    } else if (exprStr.equals("true", ignoreCase=true)) {
+        return AbstractValue.Data(null, null, true)
+    } else if (exprStr.equals("false", ignoreCase=true)) {
+        return AbstractValue.Data(null, null, false)
+    } else if (expr is net.sf.jsqlparser.schema.Column) {
+        val colName = expr.columnName
+        return AbstractValue.DbState(null, null, null, table.get(colName)!!, AggregateKind.ID)
+    } else if (expr is Subtraction) {
+        val left = evalSqlExpr(expr.leftExpression, sql, table)
+        val right = evalSqlExpr(expr.rightExpression, sql, table)
+        return left.sub(null, right)
+    } else if (expr is Addition) {
+        val left = evalSqlExpr(expr.leftExpression, sql, table)
+        val right = evalSqlExpr(expr.rightExpression, sql, table)
+        return left.add(null, right)
     } else {
         throw IllegalArgumentException("Cannot evaluate SQL expression $expr")
     }
