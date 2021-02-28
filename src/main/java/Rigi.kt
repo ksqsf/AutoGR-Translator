@@ -182,12 +182,14 @@ fun generateSop(effect: Effect, suffix: Int): String {
             is Shadow.Insert -> {
                 val table = shadow.table
                 for ((col, value) in shadow.values) {
-                    if (value == null) {
+                    if (value == null || value is AbstractValue.Null) {
                         println("[DBG] null value $shadow")
                     }
                     sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
                 }
-                sb.append("        state['TABLE_${table.name}'].insert(${table.columns.map { it.qualifiedName }.joinToString(",")})\n")
+                val locator = table.columns.filter { it.pkey }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(", ")
+                val otherKeys = table.columns.filter { !it.pkey }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
+                sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys})")
             }
         }
     }
