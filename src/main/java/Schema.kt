@@ -63,7 +63,7 @@ class Table(val def: CreateTable) {
 
     fun get(name: String): Column? {
         for (col in columns) {
-            if (col.name == name)
+            if (col.name.equals(name, ignoreCase = true))
                 return col
         }
         return null
