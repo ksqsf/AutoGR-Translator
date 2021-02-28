@@ -20,24 +20,24 @@ from Rigi.argvbuilder import *
     }.toMap()
 
     sb.append("\n")
-    sb.append(generateRigiDBSchema(analyzer.schema))
-    sb.append("\n")
-    sb.append(generateGenArgv(effectMap))
+    sb.appendLine(generateRigiDBSchema(analyzer.schema))
+    sb.appendLine(generateGenArgv(effectMap))
 
     for ((op, effectSet) in effectMap) {
         val ob = StringBuilder()
         ob.append("""class @OP@():
     def __init__(self):
         self.ops = [${(effectSet.indices).map { "(self.cond$it, self.csop$it, self.sop$it)" }.joinToString(", ")}]
+
 """)
         var cnt = 0
         for (effect in effectSet) {
-            ob.append(generateCond(effect, cnt))
-            ob.append(generateCondSop(effect, cnt))
-            ob.append(generateSop(effect, cnt))
+            ob.appendLine(generateCond(effect, cnt))
+            ob.appendLine(generateCondSop(effect, cnt))
+            ob.appendLine(generateSop(effect, cnt))
             cnt++
         }
-        sb.append(ob.toString().replace("@OP@", op))
+        sb.appendLine(ob.toString().replace("@OP@", op))
     }
 
     sb.append("""class $appName():
@@ -177,15 +177,17 @@ fun generateSop(effect: Effect, suffix: Int): String {
                     sb.append("        ${col.qualifiedName} = $newValStr\n")
                 }
                 // Call update with new values
-                sb.append("        state['TABLE_${table.name}'].update($locatorStr, ${table.columns.map { it.qualifiedName }.joinToString(", ")})\n")
+                val valueDictStr = table.columns.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(", ")
+                sb.append("        state['TABLE_${table.name}'].update($locatorStr, {$valueDictStr})\n")
             }
             is Shadow.Insert -> {
                 val table = shadow.table
                 for ((col, value) in shadow.values) {
                     if (value == null || value is AbstractValue.Null) {
                         println("[DBG] null value $shadow")
+                    } else {
+                        sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
                     }
-                    sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
                 }
                 val locator = table.columns.filter { it.pkey }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(", ")
                 val otherKeys = table.columns.filter { !it.pkey }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
