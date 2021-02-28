@@ -54,8 +54,9 @@ class Schema {
 }
 
 class Table(val def: CreateTable) {
-    val columns = def.columnDefinitions.map { Column(it, this) }
     val name = def.table.name
+    val columns = def.columnDefinitions.map { Column(it, this) }
+
 
     fun get(i: Int): Column {
         return columns[i]
