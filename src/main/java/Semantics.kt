@@ -222,7 +222,8 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
     }
 
     if (sqlStr.contains("now(", ignoreCase = true)) {
-        env.effect.addArgv("now", Type.Datetime)
+        // FIXME: This is a datetime
+        env.effect.addArgv("now", Type.Int)
     }
 
     val sql = CCJSqlParserUtil.parse(sqlStr)!!

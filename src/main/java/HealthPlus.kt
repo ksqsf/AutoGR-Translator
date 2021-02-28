@@ -1,3 +1,5 @@
+import java.io.File
+
 fun main() {
     val projectRoot = "/Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/procedures"
     val ddl = "/Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/ddls/healthplus-ddl.sql"
@@ -23,5 +25,6 @@ fun main() {
         }
     }
 
-    println(generateRigi("HealthPlus", analyzer, effectMap))
+    val output = generateRigi("HealthPlus", analyzer, effectMap)
+    File("/tmp/output.py").writeText(output)
 }

@@ -97,7 +97,8 @@ class Column(val def: ColumnDefinition, val table: Table) {
         } else if (raw.startsWith("double") || raw.startsWith("float")) {
             Type.Real
         } else if (raw.startsWith("datetime") || raw.startsWith("date") || raw.startsWith("time")) {
-            Type.Datetime
+            // Type.Datetime
+            Type.Int
         } else {
             println("Unrecognizable type: ${def.colDataType}")
             assert(false)

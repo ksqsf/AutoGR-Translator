@@ -27,7 +27,8 @@ from Rigi.argvbuilder import *
         val ob = StringBuilder()
         ob.append("""class @OP@():
     def __init__(self):
-        self.ops = [${(effectSet.indices).map { "(self.cond$it, self.csop$it, self.sop$it)" }.joinToString(", ")}]
+        self.sops = [${(effectSet.indices).map { "(self.cond$it, self.csop$it, self.sop$it)" }.joinToString(", ")}]
+        self.axiom = AxiomEmpty()
 
 """)
         var cnt = 0
@@ -42,8 +43,8 @@ from Rigi.argvbuilder import *
 
     sb.append("""class $appName():
     def __init__(self):
-        self.ops = [${effectMap.keys.joinToString(",")}]
-        self.tables = [${analyzer.schema.getTables().map { it.name }.joinToString(",")}]
+        self.ops = [${effectMap.keys.joinToString(",") { "${it}()" }}]
+        self.tables = [${analyzer.schema.getTables().joinToString(", ") { it.name }}]
         self.state = GenState
         self.argv = GenArgv
         self.axiom = AxiomEmpty()
@@ -102,6 +103,7 @@ fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>): String {
         }
         sb.append("\n")
     }
+    sb.append("    return builder.Build()\n")
     return sb.toString()
 }
 
@@ -134,7 +136,7 @@ fun generateCond(effect: Effect, suffix: Int): String {
 }
 
 fun generateCondSop(effect: Effect, suffix: Int): String {
-    return """    def csop$suffix():
+    return """    def csop$suffix(self, state, argv):
         return True
 """
 }
@@ -195,5 +197,6 @@ fun generateSop(effect: Effect, suffix: Int): String {
             }
         }
     }
+    sb.appendLine("        return state")
     return sb.toString()
 }

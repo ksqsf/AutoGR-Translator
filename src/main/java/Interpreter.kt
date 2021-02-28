@@ -103,7 +103,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                         } else if (typeStr.contains("Double") || typeStr.contains("Float")) {
                             effect.addArgv(varName, Type.Real)
                         } else if (typeStr.contains("Date")) {
-                            effect.addArgv(varName, Type.Datetime)
+                            // effect.addArgv(varName, Type.Int)
+                            // FIXME: Use int for date
                         } else if (typeStr.contains("Int")) {
                             effect.addArgv(varName, Type.Int)
                         } else if (!typeStr.contains("Connection")) {
