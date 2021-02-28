@@ -5,6 +5,7 @@ import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration
 import net.sf.jsqlparser.expression.JdbcParameter
 import net.sf.jsqlparser.expression.operators.relational.EqualsTo
+import net.sf.jsqlparser.expression.operators.relational.ExpressionList
 import net.sf.jsqlparser.parser.CCJSqlParserUtil
 import net.sf.jsqlparser.statement.delete.Delete
 import net.sf.jsqlparser.statement.insert.Insert
@@ -12,6 +13,7 @@ import net.sf.jsqlparser.statement.select.PlainSelect
 import net.sf.jsqlparser.statement.select.Select
 import net.sf.jsqlparser.statement.update.Update
 import net.sf.jsqlparser.util.TablesNamesFinder
+import java.lang.IllegalArgumentException
 
 val basicUpdates = setOf(
     "java.sql.Statement.executeUpdate",
@@ -226,8 +228,21 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             println("[update] Update $sql, cols=${sql.columns}, exprs=${sql.expressions}, from=${sql.fromItem}, tbl=${sql.table}")
         }
         is Insert -> {
-            val table = env.schema.get(sql.table.name)!!
             println("[update] Insert $sql, cols=${sql.columns}, table=${sql.table}, itemL=${sql.itemsList}, exprL=${sql.setExpressionList}")
+            val table = env.schema.get(sql.table.name)!!
+            val exprs = sql.itemsList as ExpressionList
+            val valueMap = mutableMapOf<Column, AbstractValue>()
+            if (sql.columns == null) {
+                for ((col, expr) in table.columns.zip(exprs.expressions)) {
+                    valueMap[col] = evalSqlExpr(expr, receiver)
+                }
+            } else {
+                for ((col, expr) in sql.columns.zip(exprs.expressions)) {
+                    valueMap[table.get(col.columnName)!!] = evalSqlExpr(expr, receiver)
+                }
+            }
+            val shadow = Shadow.Insert(table, valueMap)
+            env.effect.addShadow(shadow)
         }
         is Delete -> {
             println("[update] Delete $sql, tbl=${sql.table}, tbls=${sql.tables}, where=${sql.where}")
@@ -293,4 +308,21 @@ fun notNilSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?
 
     val receiver = receiver!! as AbstractValue.ResultSet
     return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver)
+}
+
+fun evalSqlExpr(expr: net.sf.jsqlparser.expression.Expression, sql: AbstractValue.SqlStmt): AbstractValue {
+    val exprStr = expr.toString()
+    if (exprStr.startsWith("'")) {
+        return AbstractValue.Data(null, null, exprStr.substringAfter("'").substringBefore("'"))
+    } else if (Regex("\\d+").matches(exprStr)) {
+        return AbstractValue.Data(null, null, exprStr.toInt())
+    } else if (exprStr.contains("now", ignoreCase = true)) {
+        return AbstractValue.Free(null, null, "now")
+    } else if (exprStr.contains("null", ignoreCase = true)) {
+        return AbstractValue.Null(null, null)
+    } else if (exprStr == "?") {
+        return sql.params[(expr as JdbcParameter).index]!!
+    } else {
+        throw IllegalArgumentException("Cannot evaluate SQL expression $expr")
+    }
 }

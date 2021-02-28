@@ -100,8 +100,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     }
 
     data class Null(
-        val e: Expression,
-        val t: ResolvedType
+        val e: Expression?,
+        val t: ResolvedType?
     ): AbstractValue(e, t) {
         override fun toString(): String {
             return "(null from $expr)"
@@ -148,11 +148,16 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             println("[WARN] NullPointerException!")
             return Unknown(expr, expr.calculateResolvedType())
         }
+
+        override fun toRigi(): String {
+            println("[WARN] Null toRigi = None")
+            return "None"
+        }
     }
 
     data class Data(
-        val e: Expression,
-        val t: ResolvedType,
+        val e: Expression?,
+        val t: ResolvedType?,
         val data: Any
     ): AbstractValue(e, t) {
         override fun negate(expr: Expression): AbstractValue {
@@ -281,8 +286,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
     // Variable names that occur free
     data class Free(
-        val e: Expression,
-        val t: ResolvedType,
+        val e: Expression?,
+        val t: ResolvedType?,
         val name: String
     ): AbstractValue(e, t) {
         override fun toString(): String {
@@ -506,9 +511,6 @@ enum class Operator {
             GT -> ">"
             LE -> "<="
             LT -> "<"
-            else -> {
-                super.toString()
-            }
         }
     }
 }
