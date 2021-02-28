@@ -229,6 +229,12 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
     when (sql) {
         is Update -> {
             println("[update] Update $sql, cols=${sql.columns}, exprs=${sql.expressions}, from=${sql.fromItem}, tbl=${sql.table}")
+            val table = env.schema.get(sql.table.name)!!
+            val valueList = sql.expressions.map { evalSqlExpr(it, receiver, table) }
+            val columnList = sql.columns.map { table.get(it.columnName)!! }
+            val locators = whereToLocators(receiver, table, sql.where)
+            val shadow = Shadow.Update(table, locators, columnList.zip(valueList).toMap())
+            env.effect.addShadow(shadow)
         }
         is Insert -> {
             println("[update] Insert $sql, cols=${sql.columns}, table=${sql.table}, itemL=${sql.itemsList}, exprL=${sql.setExpressionList}")
