@@ -274,7 +274,7 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
         override fun toRigi(): String {
             when (data) {
-                is String -> return "'${quote(data)}'"
+                is String -> return "StringVal('${quote(data)}')"
                 is Int -> return "$data"
                 is Long -> return "$data"
                 is Double -> return "$data"
