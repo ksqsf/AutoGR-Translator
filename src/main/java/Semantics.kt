@@ -234,7 +234,7 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             val valueList = sql.expressions.map { evalSqlExpr(it, receiver, table) }
             val columnList = sql.columns.map { table.get(it.columnName)!! }
             val locators = whereToLocators(receiver, table, sql.where)
-            val shadow = Shadow.Update(table, locators, columnList.zip(valueList).toMap())
+            val shadow = Shadow.Update(table, locators, castValues(columnList, valueList))
             env.effect.addShadow(shadow)
         }
         is Insert -> {
@@ -244,11 +244,12 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             val valueMap = mutableMapOf<Column, AbstractValue>()
             if (sql.columns == null) {
                 for ((col, expr) in table.columns.zip(exprs.expressions)) {
-                    valueMap[col] = evalSqlExpr(expr, receiver, table)
+                    valueMap[col] = castValue(col, evalSqlExpr(expr, receiver, table))
                 }
             } else {
                 for ((col, expr) in sql.columns.zip(exprs.expressions)) {
-                    valueMap[table.get(col.columnName)!!] = evalSqlExpr(expr, receiver, table)
+                    val col = table.get(col.columnName)!!
+                    valueMap[table.get(col.name)!!] = castValue(col, evalSqlExpr(expr, receiver, table))
                 }
             }
             val shadow = Shadow.Insert(table, valueMap)
@@ -267,6 +268,22 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
     }
 
     return AbstractValue.Unknown(self, self.calculateResolvedType())
+}
+
+fun castValue(col: Column, value: AbstractValue): AbstractValue {
+    if (col.type == Type.Datetime && value is AbstractValue.Data && value.data is String) {
+        return AbstractValue.Data(null, null, parseDateTimeString(value.data))
+    } else {
+        return value
+    }
+}
+
+fun castValues(columnList: List<Column>, valueList: List<AbstractValue>): Map<Column, AbstractValue?> {
+    val result = mutableMapOf<Column, AbstractValue?>()
+    for ((col, value) in columnList.zip(valueList)) {
+        result[col] = castValue(col, value)
+    }
+    return result
 }
 
 fun setParameterSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {

@@ -44,7 +44,6 @@ sealed class Shadow {
         override fun toString(): String {
             return "(DELETE $table $locators)"
         }
-
     }
     data class Insert(val table: Table, val values: Map<Column, AbstractValue?>): Shadow() {
         override fun toString(): String {

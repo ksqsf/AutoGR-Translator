@@ -62,7 +62,7 @@ fun generateRigiDBSchema(schema: Schema): String {
         sb.append("$table = Table('$table')\n")
         val pkeys = mutableListOf<Column>()
         for (col in table.columns) {
-            sb.append("$table.addAttr('${col.name}', Table.Type.${col.type.toString().toUpperCase()})\n")
+            sb.append("$table.addAttr('${col.name}', Table.${col.type.toRigi()})\n")
             if (col.pkey) {
                 pkeys.add(col)
             }
@@ -99,7 +99,7 @@ fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>): String {
     for ((eName, args) in argvMap) {
         sb.append("    builder.NewOp('$eName')\n")
         for ((argName, argType) in args) {
-            sb.append("    builder.AddArgv('$argName', ArgvBuilder.Type.${argType.toString().toUpperCase()})\n")
+            sb.append("    builder.AddArgv('$argName', ArgvBuilder.${argType.toRigi()})\n")
         }
         sb.append("\n")
     }

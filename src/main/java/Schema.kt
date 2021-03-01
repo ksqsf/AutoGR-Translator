@@ -97,8 +97,7 @@ class Column(val def: ColumnDefinition, val table: Table) {
         } else if (raw.startsWith("double") || raw.startsWith("float")) {
             Type.Real
         } else if (raw.startsWith("datetime") || raw.startsWith("date") || raw.startsWith("time")) {
-            // Type.Datetime
-            Type.Int
+            Type.Datetime
         } else {
             println("Unrecognizable type: ${def.colDataType}")
             assert(false)
@@ -111,7 +110,15 @@ enum class Type {
     String,
     Real,
     Int,
-    Datetime
+    Datetime;
+
+    fun toRigi(): kotlin.String {
+        if (this == Datetime) {
+            return "Type.INT"
+        } else {
+            return "Type.${this.toString().toUpperCase()}"
+        }
+    }
 }
 
 fun main() {
