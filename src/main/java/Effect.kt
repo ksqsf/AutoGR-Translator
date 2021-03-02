@@ -11,6 +11,7 @@ class Effect(analyzer: Analyzer, val sourcePath: IntraPath) {
     val interpreter = Interpreter(sourcePath.intragraph, analyzer.schema, this)
     val argv = mutableMapOf<String, Type>()
     val pathCondition = mutableListOf<AbstractValue>()
+    val next = mutableListOf<Effect>()
 
     var shadows = mutableListOf<Shadow>()
 
@@ -25,6 +26,10 @@ class Effect(analyzer: Analyzer, val sourcePath: IntraPath) {
     fun addShadow(shadow: Shadow) {
         println("[DBG] add shadow $shadow")
         shadows.add(shadow)
+    }
+
+    fun addNext(effect: Effect) {
+        next.add(effect)
     }
 
     fun tryToAnalyze() {
