@@ -104,11 +104,9 @@ fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>): String {
 }
 
 fun generateCond(effect: Effect, suffix: Int): String {
-    val result = mutableListOf<String>()
-    if (effect.pathCondition.isEmpty()) {
-        result.add("True")
-    } else {
-        for (cond in effect.pathCondition) {
+    fun pathConditionToRigi(pathCondition: MutableList<AbstractValue>): List<String> {
+        val result = mutableListOf<String>()
+        for (cond in pathCondition) {
             when (cond) {
                 is AbstractValue.DbNotNil -> {
                     result.add(cond.toRigi())
@@ -118,9 +116,21 @@ fun generateCond(effect: Effect, suffix: Int): String {
                 }
             }
         }
+        return result
+    }
+
+    val result = mutableListOf<String>()
+    result += pathConditionToRigi(effect.pathCondition)
+    for (next in effect.next) {
+        for (cond in pathConditionToRigi(next.pathCondition)) {
+            result.add("Not($cond)")
+        }
     }
     val sb = StringBuilder()
     sb.append("    def cond$suffix(self, state, argv):\n")
+    for ((argName, _) in effect.argv) {
+        sb.append("        $argName = argv['@OP@']['$argName']\n")
+    }
     if (result.size == 0) {
         sb.append("        return True\n")
     } else if (result.size == 1) {
@@ -167,7 +177,7 @@ fun generateSop(effect: Effect, suffix: Int): String {
                 val locatorStr = locatorsToRigi(shadow.locators)
                 // Read old values
                 for (col in table.columns) {
-                    sb.append("        ${col.qualifiedName} = state['TABLE_${table.name}'].get($locatorStr)\n")
+                    sb.append("        ${col.qualifiedName} = state['TABLE_${table.name}'].get($locatorStr, '${col.name}')\n")
                 }
                 // Update values
                 for ((col, newValue) in shadow.values) {
@@ -187,8 +197,14 @@ fun generateSop(effect: Effect, suffix: Int): String {
                         sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
                     }
                 }
-                val locator = table.columns.filter { it.pkey }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(", ")
-                val otherKeys = table.columns.filter { !it.pkey }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
+                val validColumns = shadow.values.filter {
+                    it.value != null && (it.value !is AbstractValue.Null)
+                }.map { it.key }
+                println(table)
+                println(table.pkeys)
+                val firstPKey = table.pkeys[0].intersect(validColumns)
+                val locator = validColumns.filter { firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
+                val otherKeys = validColumns.filter { !firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
                 sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys})")
             }
         }
