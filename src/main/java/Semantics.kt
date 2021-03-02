@@ -169,38 +169,47 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
             }
 
             // Collect indexers
-            when (where) {
-                is EqualsTo -> {
-                    val left = where.leftExpression.toString()
-                    val rightExpr = where.rightExpression
-                    if (!left.contains(".")) {
-                        // This is a simple query like A = B
-                        val tblName = selectBody.fromItem.toString()
-                        assert(!tblName.contains(","))
-                        val leftCol = env.schema.get(tblName)!!.get(left)!!
-                        // NOTE: HealthPlus only has "SELECT ... WHERE X = ?"
-                        // TODO: locator
-//                        val rightCol = env.schema.get(tblName)!!.get(right)!!
-                        leftCol.setPKey()
-//                        rs.locators.add(Locator.Eq(leftCol, rightCol))
-                    } else {
-                        // TODO: locator
-                        // INNER JOIN, t1.x = t2.y
-                        val (tblName1, colName1) = left.split(".")
-                        val (tblName2, colName2) = rightExpr.toString().split(".")
-                        val leftCol = env.schema.get(tblName1)!!.get(colName1)!!
-//                        val rightCol = env.schema.get(tblName2)!!.get(colName2)!!
-                        leftCol.setPKey()
-//                        rs.locators.add(Locator.Eq(leftCol, rightCol))
-                    }
+            val table = env.schema.get(selectBody.fromItem.toString())!!
+            val indexers = collectColumnsFromExpr(where).map {
+                if (it.contains(".")) {
+                    assert(it.substringBefore(".") == table.name)
                 }
-                null -> {
-                    // no where clause
-                }
-                else -> {
-                    println("[ERR-SQL] cannot handle this where clause $where of ${where::class}")
-                }
-            }
+                it.substringAfter(".")
+            }.map { table.get(it)!! }
+            table.addPKey(indexers.toSet())
+
+//            when (where) {
+//                is EqualsTo -> {
+//                    val left = where.leftExpression.toString()
+//                    val rightExpr = where.rightExpression
+//                    if (!left.contains(".")) {
+//                        // This is a simple query like A = B
+//                        val tblName = selectBody.fromItem.toString()
+//                        assert(!tblName.contains(","))
+//                        val leftCol = env.schema.get(tblName)!!.get(left)!!
+//                        // NOTE: HealthPlus only has "SELECT ... WHERE X = ?"
+//                        // TODO: locator
+////                        val rightCol = env.schema.get(tblName)!!.get(right)!!
+//                        leftCol.setPKey()
+////                        rs.locators.add(Locator.Eq(leftCol, rightCol))
+//                    } else {
+//                        // TODO: locator
+//                        // INNER JOIN, t1.x = t2.y
+//                        val (tblName1, colName1) = left.split(".")
+//                        val (tblName2, colName2) = rightExpr.toString().split(".")
+//                        val leftCol = env.schema.get(tblName1)!!.get(colName1)!!
+////                        val rightCol = env.schema.get(tblName2)!!.get(colName2)!!
+//                        leftCol.setPKey()
+////                        rs.locators.add(Locator.Eq(leftCol, rightCol))
+//                    }
+//                }
+//                null -> {
+//                    // no where clause
+//                }
+//                else -> {
+//                    println("[ERR-SQL] cannot handle this where clause $where of ${where::class}")
+//                }
+//            }
 
             return rs
         }
@@ -236,6 +245,7 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             val locators = whereToLocators(receiver, table, sql.where)
             val shadow = Shadow.Update(table, locators, castValues(columnList, valueList))
             env.effect.addShadow(shadow)
+            table.addPKey(locators.keys)
         }
         is Insert -> {
             println("[update] Insert $sql, cols=${sql.columns}, table=${sql.table}, itemL=${sql.itemsList}, exprL=${sql.setExpressionList}")
@@ -261,6 +271,7 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             val locators = whereToLocators(receiver, table, sql.where)
             val shadow = Shadow.Delete(table, locators)
             env.effect.addShadow(shadow)
+            table.addPKey(locators.keys)
         }
         else -> {
             println("[ERR] Unknown type of update $sql")
@@ -273,6 +284,8 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
 fun castValue(col: Column, value: AbstractValue): AbstractValue {
     if (col.type == Type.Datetime && value is AbstractValue.Data && value.data is String) {
         return AbstractValue.Data(null, null, parseDateTimeString(value.data))
+    } else if (col.type == Type.Real && value is AbstractValue.Data && value.data is Long) {
+        return AbstractValue.Data(null, null, value.data.toDouble())
     } else {
         return value
     }
@@ -348,6 +361,29 @@ fun whereToLocators(sql: AbstractValue.SqlStmt, table: Table, where: net.sf.jsql
         }
         else -> {
             throw IllegalArgumentException("where clause is not supported $where")
+        }
+    }
+}
+
+fun collectColumnsFromExpr(expr: net.sf.jsqlparser.expression.Expression?): Set<String> {
+    when (expr) {
+        null -> {
+            return emptySet()
+        }
+        is net.sf.jsqlparser.schema.Column -> {
+            return setOf(expr.fullyQualifiedName)
+        }
+        is JdbcParameter -> {
+            return emptySet()
+        }
+        is EqualsTo -> {
+            return collectColumnsFromExpr(expr.leftExpression) + collectColumnsFromExpr(expr.rightExpression)
+        }
+        is AndExpression -> {
+            return collectColumnsFromExpr(expr.leftExpression) + collectColumnsFromExpr(expr.rightExpression)
+        }
+        else -> {
+            throw IllegalArgumentException("cannot collect columns from $expr")
         }
     }
 }

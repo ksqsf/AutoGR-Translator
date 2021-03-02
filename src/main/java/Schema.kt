@@ -42,7 +42,8 @@ class Schema {
                     for (index in stmt.indexes) {
                         if (index is NamedConstraint && index.type == "PRIMARY KEY") {
                             for (pcol in index.columns) {
-                                table.get(pcol.toString())!!.setPKey()
+                                table.addPKey(setOf(table.get(pcol.columnName)!!))
+                                // table.get(pcol.toString())!!.setPKey()
                             }
                         }
                     }
@@ -53,9 +54,12 @@ class Schema {
     }
 }
 
+typealias PKey = Set<Column>
+
 class Table(val def: CreateTable) {
     val name = def.table.name
     val columns = def.columnDefinitions.map { Column(it, this) }
+    val pkeys = mutableListOf<PKey>()
 
     fun get(i: Int): Column {
         return columns[i]
@@ -69,6 +73,11 @@ class Table(val def: CreateTable) {
         return null
     }
 
+    fun addPKey(pkey: PKey) {
+        if (!pkeys.contains(pkey) && pkey.isNotEmpty())
+            pkeys.add(pkey)
+    }
+
     override fun toString(): String {
         return name
     }
@@ -77,12 +86,12 @@ class Table(val def: CreateTable) {
 class Column(val def: ColumnDefinition, val table: Table) {
     val name: String = def.columnName
     val type = convertType()
-    var pkey = false
+    //var pkey = false
     val qualifiedName = "${table.name}_${name}"
 
-    fun setPKey() {
-        pkey = true
-    }
+//    fun setPKey() {
+//        pkey = true
+//    }
 
     override fun toString(): String {
         return "${table.name}.$name"
