@@ -111,6 +111,9 @@ fun generateCond(effect: Effect, suffix: Int): String {
                 is AbstractValue.DbNotNil -> {
                     result.add(cond.toRigi())
                 }
+                is AbstractValue.Binary -> {
+                    result.add(cond.toRigi())
+                }
                 else -> {
                     println("[ERR] unknown cond $cond")
                 }
