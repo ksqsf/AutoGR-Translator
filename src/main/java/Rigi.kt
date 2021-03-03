@@ -28,7 +28,7 @@ from Rigi.argvbuilder import *
         ob.append("""class @OP@():
     def __init__(self):
         self.sops = [${(effectSet.indices).map { "(self.cond$it, self.csop$it, self.sop$it)" }.joinToString(", ")}]
-        self.axiom = AxiomEmpty()
+        self.axiom = ${generateOpAxiomFromUniqueArgv(effectSet)}
 
 """)
         var cnt = 0
@@ -41,18 +41,33 @@ from Rigi.argvbuilder import *
         sb.appendLine(ob.toString().replace("@OP@", op))
     }
 
+    val opAxiom = if (analyzer.enableCommute) {
+        "AxiomsAnd(BuildArgvAxiom(self.ops))"
+    } else {
+        "AxiomEmpty()"
+    }
+
     sb.append("""class $appName():
     def __init__(self):
         self.ops = [${effectMap.keys.joinToString(",") { "${it}()" }}]
         self.tables = [${analyzer.schema.getTables().joinToString(", ") { it.name }}]
         self.state = GenState
         self.argv = GenArgv
-        self.axiom = AxiomEmpty()
+        self.axiom = $opAxiom
 
-check($appName()) 
+check($appName())
 """)
 
     return sb.toString()
+}
+
+fun generateOpAxiomFromUniqueArgv(effectSet: Set<Effect>): String {
+    val uniqueArgv = effectSet.map { it.uniqueArgv }.flatten().toSet()
+    if (uniqueArgv.isEmpty()) {
+        return "AxiomEmpty()"
+    } else {
+        return "AxiomsAnd(" + uniqueArgv.joinToString(", ") { "AxiomUniqueArgument('@OP@', '$it')" } + ")"
+    }
 }
 
 fun generateRigiDBSchema(schema: Schema): String {

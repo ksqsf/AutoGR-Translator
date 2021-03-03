@@ -6,12 +6,13 @@ import net.sf.jsqlparser.expression.Expression
 // Argv is a list of (name, type). Read-only DB queries are considered as argv too.
 // Cond is a list of boolean expressions.
 // Side effect is a SQL statement that updates the DB state.
-class Effect(analyzer: Analyzer, val sourcePath: IntraPath) {
+class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
 
     val interpreter = Interpreter(sourcePath.intragraph, analyzer.schema, this)
     val argv = mutableMapOf<String, Type>()
     val pathCondition = mutableListOf<AbstractValue>()
     val next = mutableListOf<Effect>()
+    val uniqueArgv = mutableSetOf<String>()
 
     var shadows = mutableListOf<Shadow>()
 
@@ -21,6 +22,12 @@ class Effect(analyzer: Analyzer, val sourcePath: IntraPath) {
 
     fun addArgv(name: String, type: Type) {
         argv.putIfAbsent(name, type)
+
+        if (analyzer.enableCommute) {
+            if (name.startsWith("new")) {
+                uniqueArgv.add(name)
+            }
+        }
     }
 
     fun addArgv(column: Column) {

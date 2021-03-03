@@ -23,6 +23,7 @@ typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
 
 class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
+    val enableCommute: Boolean = true
     val intergraph: InterGraph
     val intragraphs: IntraGraphSet
     val schema = Schema()
