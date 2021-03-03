@@ -119,6 +119,9 @@ fun generateCond(effect: Effect, suffix: Int): String {
                 }
             }
         }
+        if (result.isEmpty()) {
+            result.add("True")
+        }
         return result
     }
 
@@ -133,6 +136,11 @@ fun generateCond(effect: Effect, suffix: Int): String {
     sb.append("    def cond$suffix(self, state, argv):\n")
     for ((argName, _) in effect.argv) {
         sb.append("        $argName = argv['@OP@']['$argName']\n")
+    }
+    for (next in effect.next) {
+        for ((argName, _) in next.argv) {
+            sb.append("        $argName = argv['@OP@']['$argName']\n")
+        }
     }
     if (result.size == 0) {
         sb.append("        return True\n")
