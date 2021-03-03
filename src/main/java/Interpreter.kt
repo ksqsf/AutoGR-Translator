@@ -102,16 +102,16 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     // Free variables are arguments.
                     if (!effect.argv.contains(varName)) {
                         val typeStr = javaType.toString()
-                        if (typeStr.contains("String")) {
+                        if (typeStr.contains("String", ignoreCase = true)) {
                             effect.addArgv(varName, Type.String)
-                        } else if (typeStr.contains("Double") || typeStr.contains("Float")) {
+                        } else if (typeStr.contains("Double", ignoreCase = true) || typeStr.contains("Float", ignoreCase = true)) {
                             effect.addArgv(varName, Type.Real)
-                        } else if (typeStr.contains("Date")) {
+                        } else if (typeStr.contains("Date", ignoreCase = true)) {
                             // effect.addArgv(varName, Type.Int)
                             // FIXME: Use int for date
-                        } else if (typeStr.contains("Int")) {
+                        } else if (typeStr.contains("Int", ignoreCase = true)) {
                             effect.addArgv(varName, Type.Int)
-                        } else if (!typeStr.contains("Connection")) {
+                        } else if (!typeStr.contains("Connection", ignoreCase = true)) {
                             println("[WARN-INT] unknown arg type $typeStr")
                         }
                     }
