@@ -178,38 +178,10 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
             }.map { table.get(it)!! }
             table.addPKey(indexers.toSet())
 
-//            when (where) {
-//                is EqualsTo -> {
-//                    val left = where.leftExpression.toString()
-//                    val rightExpr = where.rightExpression
-//                    if (!left.contains(".")) {
-//                        // This is a simple query like A = B
-//                        val tblName = selectBody.fromItem.toString()
-//                        assert(!tblName.contains(","))
-//                        val leftCol = env.schema.get(tblName)!!.get(left)!!
-//                        // NOTE: HealthPlus only has "SELECT ... WHERE X = ?"
-//                        // TODO: locator
-////                        val rightCol = env.schema.get(tblName)!!.get(right)!!
-//                        leftCol.setPKey()
-////                        rs.locators.add(Locator.Eq(leftCol, rightCol))
-//                    } else {
-//                        // TODO: locator
-//                        // INNER JOIN, t1.x = t2.y
-//                        val (tblName1, colName1) = left.split(".")
-//                        val (tblName2, colName2) = rightExpr.toString().split(".")
-//                        val leftCol = env.schema.get(tblName1)!!.get(colName1)!!
-////                        val rightCol = env.schema.get(tblName2)!!.get(colName2)!!
-//                        leftCol.setPKey()
-////                        rs.locators.add(Locator.Eq(leftCol, rightCol))
-//                    }
-//                }
-//                null -> {
-//                    // no where clause
-//                }
-//                else -> {
-//                    println("[ERR-SQL] cannot handle this where clause $where of ${where::class}")
-//                }
-//            }
+            if (rs.hasJoin) {
+                println("[WARN] this sql query has joins!!")
+            }
+
 
             return rs
         }
