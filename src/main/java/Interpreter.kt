@@ -39,9 +39,13 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         while (dest > depth) {
             pushScope()
         }
-        while (dest < depth) {
-            popScope()
-        }
+        // FIXME: fails this case:
+        // int a;
+        // if (cond) { a = 1; }
+        // use(a);
+//        while (dest < depth) {
+//            popScope()
+//        }
     }
 
     fun lookup(varName: String): AbstractValue? {
