@@ -371,7 +371,9 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     data class DbNotNil(
         val e: Expression,
         val t: ResolvedType,
-        val query: ResultSet,
+        val stmt: SqlStmt,
+        val table: Table,
+        val locators: Map<Column, AbstractValue>,
     ): AbstractValue(e, t) {
         var reversed = false
 
@@ -381,33 +383,38 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
         override fun toString(): String {
             if (reversed) {
-                return "(Nil $query)"
+                return "(Nil $locators)"
             } else {
-                return "(notNil $query)"
+                return "(notNil $locators)"
             }
         }
 
         override fun not(expr: Expression): AbstractValue {
-            val clone = DbNotNil(e, t, query)
+            val clone = DbNotNil(e, t, stmt, table, locators)
             clone.reverse()
             return clone
         }
 
         override fun toRigi(): String {
             val expect = if (reversed) { "False" } else { "True" }
-            val where = query.select.where
             val parts = mutableListOf<String>()
-            if (where is EqualsTo && where.rightExpression is JdbcParameter) {
-                val right = where.rightExpression as JdbcParameter
-                val index = right.index
-                val value = query.stmt.params[index]!!
-                val left = where.leftExpression.toString()
-                assert(!left.contains("."))
-                parts.add("'$left': ${value.toRigi()}")
-            } else if (where != null) {
-                println("[ERR] don't know $where (${where::class})")
+            for (locator in locators) {
+                parts.add("'${locator.key.name}': ${locator.value.toRigi()}")
             }
-            return "(state['TABLE_${query.tables[0]}'].notNil({${parts.joinToString(", ")}}) == $expect)"
+            return "(state['TABLE_${table.name}'].notNil({${parts.joinToString(", ")}}) == $expect)"
+//            val where = query.select.where
+//            val parts = mutableListOf<String>()
+//            if (where is EqualsTo && where.rightExpression is JdbcParameter) {
+//                val right = where.rightExpression as JdbcParameter
+//                val index = right.index
+//                val value = query.stmt.params[index]!!
+//                val left = where.leftExpression.toString()
+//                assert(!left.contains("."))
+//                parts.add("'$left': ${value.toRigi()}")
+//            } else if (where != null) {
+//                println("[ERR] don't know $where (${where::class})")
+//            }
+//            return "(state['TABLE_${query.tables[0]}'].notNil({${parts.joinToString(", ")}}) == $expect)"
         }
     }
 

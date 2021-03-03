@@ -218,6 +218,13 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             val shadow = Shadow.Update(table, locators, castValues(columnList, valueList))
             env.effect.addShadow(shadow)
             table.addPKey(locators.keys)
+
+            // UPDATE asserts WHERE selects something.
+            env.effect.addCondition(AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver, table, locators))
+            //Consider these locators arguments too.
+            for (locator in locators) {
+                env.effect.addArgv(locator.key)
+            }
         }
         is Insert -> {
             println("[update] Insert $sql, cols=${sql.columns}, table=${sql.table}, itemL=${sql.itemsList}, exprL=${sql.setExpressionList}")
@@ -308,7 +315,9 @@ fun notNilSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?
     }
 
     val receiver = receiver!! as AbstractValue.ResultSet
-    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver)
+    assert(receiver.tables.size == 1)
+    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.stmt, receiver.tables[0]!!,
+        whereToLocators(receiver.stmt, receiver.tables[0]!!, receiver.select.where))
 }
 
 fun whereToLocators(sql: AbstractValue.SqlStmt, table: Table, where: net.sf.jsqlparser.expression.Expression): Map<Column, AbstractValue> {

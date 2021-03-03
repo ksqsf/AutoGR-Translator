@@ -23,6 +23,10 @@ class Effect(analyzer: Analyzer, val sourcePath: IntraPath) {
         argv.putIfAbsent(name, type)
     }
 
+    fun addArgv(column: Column) {
+        argv.putIfAbsent("${column.table.name}_${column.name}", column.type)
+    }
+
     fun addShadow(shadow: Shadow) {
         println("[DBG] add shadow $shadow")
         shadows.add(shadow)
