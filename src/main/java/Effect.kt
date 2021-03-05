@@ -1,5 +1,3 @@
-import net.sf.jsqlparser.expression.Expression
-
 // Each IntraPath corresponds to an "effect".
 //
 // An effect is represented as (argv, cond, side effect).
@@ -13,7 +11,7 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
     val pathCondition = mutableListOf<AbstractValue>()
     val next = mutableListOf<Effect>()
 
-    var shadows = mutableListOf<Shadow>()
+    var atoms = mutableListOf<Atom>()
 
     // Unique ID axioms
     val uniqueArgv = mutableSetOf<String>()
@@ -50,9 +48,9 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
         updatedTables.add(table)
     }
 
-    fun addShadow(shadow: Shadow) {
-        println("[DBG] add shadow $shadow")
-        shadows.add(shadow)
+    fun addAtom(atom: Atom) {
+        println("[DBG] add atom $atom")
+        atoms.add(atom)
     }
 
     fun addNext(effect: Effect) {
@@ -71,18 +69,19 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
     }
 }
 
-sealed class Shadow(val table: Table) {
-    class Delete(table: Table, val locators: Map<Column, AbstractValue>): Shadow(table) {
+// Atom is the unit of DB changes. An effect may contain many atoms.
+sealed class Atom(val table: Table) {
+    class Delete(table: Table, val locators: Map<Column, AbstractValue>): Atom(table) {
         override fun toString(): String {
             return "(DELETE $table $locators)"
         }
     }
-    class Insert(table: Table, val values: Map<Column, AbstractValue?>): Shadow(table) {
+    class Insert(table: Table, val values: Map<Column, AbstractValue?>): Atom(table) {
         override fun toString(): String {
             return "(INSERT $table $values)"
         }
     }
-    class Update(table: Table, val locators: Map<Column, AbstractValue>, val values: Map<Column, AbstractValue?>): Shadow(table) {
+    class Update(table: Table, val locators: Map<Column, AbstractValue>, val values: Map<Column, AbstractValue?>): Atom(table) {
         override fun toString(): String {
             return "(UPDATE $table $values $locators)"
         }

@@ -215,8 +215,8 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             val valueList = sql.expressions.map { evalSqlExpr(it, receiver, table) }
             val columnList = sql.columns.map { table.get(it.columnName)!! }
             val locators = whereToLocators(receiver, table, sql.where)
-            val shadow = Shadow.Update(table, locators, castValues(columnList, valueList))
-            env.effect.addShadow(shadow)
+            val atom = Atom.Update(table, locators, castValues(columnList, valueList))
+            env.effect.addAtom(atom)
             table.addPKey(locators.keys)
 
             // UPDATE asserts WHERE selects something.
@@ -243,16 +243,16 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
                     valueMap[table.get(col.name)!!] = castValue(col, evalSqlExpr(expr, receiver, table))
                 }
             }
-            val shadow = Shadow.Insert(table, valueMap)
-            env.effect.addShadow(shadow)
+            val atom = Atom.Insert(table, valueMap)
+            env.effect.addAtom(atom)
             env.effect.addUpdatedTable(table)
         }
         is Delete -> {
             println("[update] Delete $sql, tbl=${sql.table}, tbls=${sql.tables}, where=${sql.where}")
             val table = env.schema.get(sql.table.name)!!
             val locators = whereToLocators(receiver, table, sql.where)
-            val shadow = Shadow.Delete(table, locators)
-            env.effect.addShadow(shadow)
+            val atom = Atom.Delete(table, locators)
+            env.effect.addAtom(atom)
             table.addPKey(locators.keys)
         }
         else -> {

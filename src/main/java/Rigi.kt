@@ -201,15 +201,15 @@ fun generateCondSop(effect: Effect, suffix: Int, enableCommute: Boolean): String
 
         val timestamps = mutableListOf<String>()
 
-        for (sop in effect.shadows) {
+        for (sop in effect.atoms) {
             when (sop) {
-                is Shadow.Update -> {
+                is Atom.Update -> {
                     val table = sop.table
                     val locatorStr = locatorsToRigi(sop.locators)
                     sb.appendLine("        ${table.name}__ts = state['TABLE_${table.name}'].get($locatorStr, '__ts')")
                     timestamps.add("${table.name}__ts")
                 }
-                is Shadow.Insert -> {
+                is Atom.Insert -> {
                     sb.append(loadInsertValues(sop))
                     val table = sop.table
                     val validColumns = sop.values.filter {
@@ -220,7 +220,7 @@ fun generateCondSop(effect: Effect, suffix: Int, enableCommute: Boolean): String
                     sb.appendLine("        ${table.name}__ts = state['TABLE_${table.name}'].get({$locator}, '__ts')")
                     timestamps.add("${table.name}__ts")
                 }
-                is Shadow.Delete -> {
+                is Atom.Delete -> {
                     // Do nothing.
                 }
             }
@@ -243,20 +243,20 @@ fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     sb.append(loadArgv(effect))
 
     // Generate sops
-    for (shadow in effect.shadows) {
-        when (shadow) {
-            is Shadow.Delete -> {
-                sb.append("        state['TABLE_${shadow.table.name}'].delete(${locatorsToRigi(shadow.locators)})\n")
+    for (atom in effect.atoms) {
+        when (atom) {
+            is Atom.Delete -> {
+                sb.append("        state['TABLE_${atom.table.name}'].delete(${locatorsToRigi(atom.locators)})\n")
             }
-            is Shadow.Update -> {
-                val table = shadow.table
-                val locatorStr = locatorsToRigi(shadow.locators)
+            is Atom.Update -> {
+                val table = atom.table
+                val locatorStr = locatorsToRigi(atom.locators)
                 // Read old values
                 for (col in table.columns) {
                     sb.append("        ${col.qualifiedName} = state['TABLE_${table.name}'].get($locatorStr, '${col.name}')\n")
                 }
                 // Update values
-                for ((col, newValue) in shadow.values) {
+                for ((col, newValue) in atom.values) {
                     val newValStr = newValue?.toRigi() ?: col.qualifiedName
                     sb.append("        ${col.qualifiedName} = $newValStr\n")
                 }
@@ -268,10 +268,10 @@ fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
                     sb.append("        state['TABLE_${table.name}'].update($locatorStr, {$valueDictStr, '__ts': now})\n")
                 }
             }
-            is Shadow.Insert -> {
-                val table = shadow.table
-                sb.append(loadInsertValues(shadow))
-                val validColumns = shadow.values.filter {
+            is Atom.Insert -> {
+                val table = atom.table
+                sb.append(loadInsertValues(atom))
+                val validColumns = atom.values.filter {
                     it.value != null && (it.value !is AbstractValue.Null)
                 }.map { it.key }
                 val firstPKey = table.pkeys[0].intersect(validColumns)
@@ -289,11 +289,11 @@ fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     return sb.toString()
 }
 
-fun loadInsertValues(shadow: Shadow.Insert): String {
+fun loadInsertValues(atom: Atom.Insert): String {
     val sb = StringBuilder()
-    for ((col, value) in shadow.values) {
+    for ((col, value) in atom.values) {
         if (value == null || value is AbstractValue.Null) {
-            println("[DBG] null value $shadow")
+            println("[DBG] null value $atom")
         } else {
             sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
         }
