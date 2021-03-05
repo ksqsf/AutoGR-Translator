@@ -225,6 +225,8 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             for (locator in locators) {
                 env.effect.addArgv(locator.key)
             }
+
+            env.effect.addUpdatedTable(table)
         }
         is Insert -> {
             println("[update] Insert $sql, cols=${sql.columns}, table=${sql.table}, itemL=${sql.itemsList}, exprL=${sql.setExpressionList}")
@@ -243,6 +245,7 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             }
             val shadow = Shadow.Insert(table, valueMap)
             env.effect.addShadow(shadow)
+            env.effect.addUpdatedTable(table)
         }
         is Delete -> {
             println("[update] Delete $sql, tbl=${sql.table}, tbls=${sql.tables}, where=${sql.where}")

@@ -1,7 +1,5 @@
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.resolution.types.ResolvedType
-import net.sf.jsqlparser.expression.JdbcParameter
-import net.sf.jsqlparser.expression.operators.relational.EqualsTo
 import net.sf.jsqlparser.statement.select.Join
 import net.sf.jsqlparser.statement.select.Limit
 import net.sf.jsqlparser.statement.select.PlainSelect

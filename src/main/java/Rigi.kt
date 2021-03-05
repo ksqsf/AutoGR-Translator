@@ -20,8 +20,8 @@ from Rigi.argvbuilder import *
     }.toMap()
 
     sb.append("\n")
-    sb.appendLine(generateRigiDBSchema(analyzer.schema))
-    sb.appendLine(generateGenArgv(effectMap))
+    sb.appendLine(generateRigiDBSchema(analyzer.schema, analyzer.enableCommute))
+    sb.appendLine(generateGenArgv(effectMap, analyzer.enableCommute))
 
     for ((op, effectSet) in effectMap) {
         val ob = StringBuilder()
@@ -33,9 +33,9 @@ from Rigi.argvbuilder import *
 """)
         var cnt = 0
         for (effect in effectSet) {
-            ob.appendLine(generateCond(effect, cnt))
-            ob.appendLine(generateCondSop(effect, cnt))
-            ob.appendLine(generateSop(effect, cnt))
+            ob.appendLine(generateCond(effect, cnt, analyzer.enableCommute))
+            ob.appendLine(generateCondSop(effect, cnt, analyzer.enableCommute))
+            ob.appendLine(generateSop(effect, cnt, analyzer.enableCommute))
             cnt++
         }
         sb.appendLine(ob.toString().replace("@OP@", op))
@@ -70,7 +70,7 @@ fun generateOpAxiomFromUniqueArgv(effectSet: Set<Effect>): String {
     }
 }
 
-fun generateRigiDBSchema(schema: Schema): String {
+fun generateRigiDBSchema(schema: Schema, enableCommute: Boolean): String {
     val sb = StringBuilder()
     for (table in schema.getTables()) {
         sb.append("\n")
@@ -78,6 +78,12 @@ fun generateRigiDBSchema(schema: Schema): String {
         for (col in table.columns) {
             sb.append("$table.addAttr('${col.name}', Table.${col.type.toRigi()})\n")
         }
+
+        // To enable LWW, each row must have __ts attribute.
+        if (enableCommute) {
+            sb.append("$table.addAttr('__ts', Table.Type.INT)\n")
+        }
+
         for (pk in table.pkeys) {
             sb.append("$table.setPKey(${pk.joinToString(",") { "'${it.name}'" }})\n")
         }
@@ -93,14 +99,14 @@ fun generateRigiDBSchema(schema: Schema): String {
     return sb.toString()
 }
 
-fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>): String {
-    val argvMap = mutableMapOf<QualifiedName, MutableSet<Pair<String, Type>>>()
+fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>, enableCommute: Boolean): String {
+    val argvMap = mutableMapOf<QualifiedName, MutableMap<String, Type>>()
     for ((eSig, eSet) in effectMap) {
         val eName = eSig.substringBefore('(')
-        argvMap.putIfAbsent(eName, mutableSetOf())
+        argvMap.putIfAbsent(eName, mutableMapOf())
         for (eff in eSet) {
             for ((argName, argType) in eff.argv) {
-                argvMap[eName]!!.add(Pair(argName, argType))
+                argvMap[eName]!![argName] = argType
             }
         }
     }
@@ -112,13 +118,19 @@ fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>): String {
         for ((argName, argType) in args) {
             sb.append("    builder.AddArgv('$argName', ArgvBuilder.${argType.toRigi()})\n")
         }
+
+        // To enable LWW, every operation must receive "now", so that the timestamp can be updated.
+        if (enableCommute && !args.keys.contains("now")) {
+            sb.append("    builder.AddArgv('now', ArgvBuilder.Type.INT)")
+        }
+
         sb.append("\n")
     }
     sb.append("    return builder.Build()\n")
     return sb.toString()
 }
 
-fun generateCond(effect: Effect, suffix: Int): String {
+fun generateCond(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     fun pathConditionToRigi(pathCondition: MutableList<AbstractValue>): List<String> {
         val result = mutableListOf<String>()
         for (cond in pathCondition) {
@@ -149,14 +161,7 @@ fun generateCond(effect: Effect, suffix: Int): String {
     }
     val sb = StringBuilder()
     sb.append("    def cond$suffix(self, state, argv):\n")
-    for ((argName, _) in effect.argv) {
-        sb.append("        $argName = argv['@OP@']['$argName']\n")
-    }
-    for (next in effect.next) {
-        for ((argName, _) in next.argv) {
-            sb.append("        $argName = argv['@OP@']['$argName']\n")
-        }
-    }
+    sb.append(loadArgv(effect, loadNext = true))
     if (result.size == 0) {
         sb.append("        return True\n")
     } else if (result.size == 1) {
@@ -167,31 +172,76 @@ fun generateCond(effect: Effect, suffix: Int): String {
     return sb.toString()
 }
 
-fun generateCondSop(effect: Effect, suffix: Int): String {
-    return """    def csop$suffix(self, state, argv):
-        return True
-"""
-}
-
-fun generateSop(effect: Effect, suffix: Int): String {
+fun loadArgv(effect: Effect, loadNext: Boolean = false): String {
     val sb = StringBuilder()
-    sb.append("    def sop$suffix(self, state, argv):\n")
-
-    fun locatorsToRigi(locators: Map<Column, AbstractValue>): String {
-        val dict = locators.map {
-            "'${it.key.name}': ${it.value.toRigi()}"
-        }
-        val lb = StringBuilder()
-        lb.append("{")
-        lb.append(dict.joinToString(","))
-        lb.append("}")
-        return lb.toString()
-    }
-
-    // Read arguments
     for ((argName, _) in effect.argv) {
         sb.append("        $argName = argv['@OP@']['$argName']\n")
     }
+    if (loadNext) {
+        for (next in effect.next) {
+            for ((argName, _) in next.argv) {
+                sb.append("        $argName = argv['@OP@']['$argName']\n")
+            }
+        }
+    }
+    return sb.toString()
+}
+
+fun generateCondSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
+    if (!enableCommute)  {
+        return """    def csop$suffix(self, state, argv):
+    return True
+"""
+    } else {
+
+        val sb = StringBuilder()
+        sb.appendLine("    def csop$suffix(self, state, argv):")
+        sb.appendLine("        now = argv['@OP@']['now']")
+        sb.append(loadArgv(effect))
+
+        val timestamps = mutableListOf<String>()
+
+        for (sop in effect.shadows) {
+            when (sop) {
+                is Shadow.Update -> {
+                    val table = sop.table
+                    val locatorStr = locatorsToRigi(sop.locators)
+                    sb.appendLine("        ${table.name}__ts = state['TABLE_${table.name}'].get($locatorStr, '__ts')")
+                    timestamps.add("${table.name}__ts")
+                }
+                is Shadow.Insert -> {
+                    sb.append(loadInsertValues(sop))
+                    val table = sop.table
+                    val validColumns = sop.values.filter {
+                        it.value != null && (it.value !is AbstractValue.Null)
+                    }.map { it.key }
+                    val firstPKey = table.pkeys[0].intersect(validColumns)
+                    val locator = validColumns.filter { firstPKey.contains(it) }.joinToString(",") { "'${it.name}': ${it.qualifiedName}" }
+                    sb.appendLine("        ${table.name}__ts = state['TABLE_${table.name}'].get({$locator}, '__ts')")
+                    timestamps.add("${table.name}__ts")
+                }
+                is Shadow.Delete -> {
+                    // Do nothing.
+                }
+            }
+
+        }
+        val tsList = timestamps.joinToString(", ") { "($it < now)" }
+        sb.appendLine("        return And($tsList)")
+        return sb.toString()
+    }
+}
+
+fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
+    val sb = StringBuilder()
+    sb.append("    def sop$suffix(self, state, argv):\n")
+
+    // Read arguments
+    if (enableCommute) {
+        sb.appendLine("        now = argv['@OP@']['now']")
+    }
+    sb.append(loadArgv(effect))
+
     // Generate sops
     for (shadow in effect.shadows) {
         when (shadow) {
@@ -212,29 +262,52 @@ fun generateSop(effect: Effect, suffix: Int): String {
                 }
                 // Call update with new values
                 val valueDictStr = table.columns.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(", ")
-                sb.append("        state['TABLE_${table.name}'].update($locatorStr, {$valueDictStr})\n")
+                if (!enableCommute) {
+                    sb.append("        state['TABLE_${table.name}'].update($locatorStr, {$valueDictStr})\n")
+                } else {
+                    sb.append("        state['TABLE_${table.name}'].update($locatorStr, {$valueDictStr, '__ts': now})\n")
+                }
             }
             is Shadow.Insert -> {
                 val table = shadow.table
-                for ((col, value) in shadow.values) {
-                    if (value == null || value is AbstractValue.Null) {
-                        println("[DBG] null value $shadow")
-                    } else {
-                        sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
-                    }
-                }
+                sb.append(loadInsertValues(shadow))
                 val validColumns = shadow.values.filter {
                     it.value != null && (it.value !is AbstractValue.Null)
                 }.map { it.key }
-                println(table)
-                println(table.pkeys)
                 val firstPKey = table.pkeys[0].intersect(validColumns)
                 val locator = validColumns.filter { firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
                 val otherKeys = validColumns.filter { !firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
-                sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys})")
+                if (enableCommute) {
+                    sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys})")
+                } else {
+                    sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys, '__ts': now})")
+                }
             }
         }
     }
     sb.appendLine("        return state")
     return sb.toString()
+}
+
+fun loadInsertValues(shadow: Shadow.Insert): String {
+    val sb = StringBuilder()
+    for ((col, value) in shadow.values) {
+        if (value == null || value is AbstractValue.Null) {
+            println("[DBG] null value $shadow")
+        } else {
+            sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
+        }
+    }
+    return sb.toString()
+}
+
+fun locatorsToRigi(locators: Map<Column, AbstractValue>): String {
+    val dict = locators.map {
+        "'${it.key.name}': ${it.value.toRigi()}"
+    }
+    val lb = StringBuilder()
+    lb.append("{")
+    lb.append(dict.joinToString(","))
+    lb.append("}")
+    return lb.toString()
 }

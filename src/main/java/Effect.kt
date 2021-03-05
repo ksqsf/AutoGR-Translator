@@ -12,9 +12,21 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
     val argv = mutableMapOf<String, Type>()
     val pathCondition = mutableListOf<AbstractValue>()
     val next = mutableListOf<Effect>()
-    val uniqueArgv = mutableSetOf<String>()
 
     var shadows = mutableListOf<Shadow>()
+
+    // Unique ID axioms
+    val uniqueArgv = mutableSetOf<String>()
+
+    // Last-Writer-Win axioms
+    val updatedTables = mutableSetOf<Table>()
+
+    init {
+        // Each operation is denoted with a timestamp.
+        if (analyzer.enableCommute) {
+            addArgv("__ts", Type.Int)
+        }
+    }
 
     fun addCondition(cond: AbstractValue) {
         pathCondition.add(cond)
@@ -32,6 +44,10 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
 
     fun addArgv(column: Column) {
         argv.putIfAbsent("${column.table.name}_${column.name}", column.type)
+    }
+
+    fun addUpdatedTable(table: Table) {
+        updatedTables.add(table)
     }
 
     fun addShadow(shadow: Shadow) {
@@ -55,18 +71,18 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
     }
 }
 
-sealed class Shadow {
-    data class Delete(val table: Table, val locators: Map<Column, AbstractValue>): Shadow() {
+sealed class Shadow(val table: Table) {
+    class Delete(table: Table, val locators: Map<Column, AbstractValue>): Shadow(table) {
         override fun toString(): String {
             return "(DELETE $table $locators)"
         }
     }
-    data class Insert(val table: Table, val values: Map<Column, AbstractValue?>): Shadow() {
+    class Insert(table: Table, val values: Map<Column, AbstractValue?>): Shadow(table) {
         override fun toString(): String {
             return "(INSERT $table $values)"
         }
     }
-    data class Update(val table: Table, val locators: Map<Column, AbstractValue>, val values: Map<Column, AbstractValue?>): Shadow() {
+    class Update(table: Table, val locators: Map<Column, AbstractValue>, val values: Map<Column, AbstractValue?>): Shadow(table) {
         override fun toString(): String {
             return "(UPDATE $table $values $locators)"
         }
