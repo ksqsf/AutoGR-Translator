@@ -10,6 +10,7 @@ fun main() {
 
     val effectMap = mutableMapOf<QualifiedName, MutableSet<Effect>>()
 
+    Timer.start("effect")
     for (effectMethodSig in analyzer.intergraph.effect) {
 //    for (effectMethodSig in setOf("com.oltpbenchmark.benchmarks.healthplus.procedures.LabAssistant_updateAccountInfo.run(java.sql.Connection, java.lang.String)")) {
         println("*** $effectMethodSig ***")
@@ -48,7 +49,10 @@ fun main() {
             }
         }
     }
+    Timer.end("effect")
 
     val output = generateRigi("HealthPlus", analyzer, effectMap)
     File("/tmp/output.py").writeText(output)
+
+    Timer.report()
 }

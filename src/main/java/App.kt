@@ -23,7 +23,7 @@ typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
 
 class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
-    val enableCommute: Boolean = true
+    val enableCommute: Boolean = false
     val intergraph: InterGraph
     val intragraphs: IntraGraphSet
     val schema = Schema()
@@ -41,7 +41,11 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
 
         val project = SourceRoot(Path.of(projectRoot))
         project.parserConfiguration = config
+
+        Timer.start("parse")
         val results = project.tryToParseParallelized()
+        Timer.end("parse")
+
         val projectFiles = project.compilationUnits
 
         // Debugging
@@ -52,11 +56,14 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
         }
 
         // Step 0. Desugar various forms of loops to simplify analysis
+        Timer.start("loop-desugar")
         for (file in projectFiles) {
             transformLoops(file)
         }
+        Timer.end("loop-desugar")
 
         // Step 1. Construct interprocedural call graph for the project
+        Timer.start("call-graph")
         intergraph = InterGraph()
         if (buildInterGraph) {
             for (file in projectFiles) {
@@ -65,31 +72,22 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
                 intergraph.union(fileG)
             }
         }
+        Timer.end("call-graph")
         val basicEffects = listOf(
             "java.sql.PreparedStatement.executeUpdate",
             "java.sql.Statement.executeUpdate"
         )
+        Timer.start("effect-collection")
         basicEffects.forEach { intergraph.markNameAsEffect(it) }
+        Timer.end("effect-collection")
 
         // Step 2. Construct intraprocedural flow graph for each method
+        Timer.start("intragraph")
         intragraphs = mutableMapOf()
         for (file in projectFiles) {
             buildIntraGraph(file, intragraphs)
         }
-
-//        for (eff in intergraph.effect) {
-//            println("Analyzing effect $eff")
-//            val g = intragraphs[eff]
-//            if (g == null) {
-//                println("No information recorded for $eff")
-//                continue
-//            }
-//            val p = g.collectEffectPaths()
-//            println("there are ${p.size} paths")
-//            for ((commitId, path) in p) {
-//                println("$commitId: $path")
-//            }
-//        }
+        Timer.end("intragraph")
 
         println("Finished")
     }
@@ -114,7 +112,9 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
     }
 
     fun loadSchema(schemaFile: String) {
+        Timer.start("db")
         schema.loadFile(schemaFile)
+        Timer.end("db")
     }
 }
 

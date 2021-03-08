@@ -20,7 +20,9 @@ from Rigi.argvbuilder import *
     }.toMap()
 
     sb.append("\n")
+    Timer.start("rigi-db")
     sb.appendLine(generateRigiDBSchema(analyzer.schema, analyzer.enableCommute))
+    Timer.end("rigi-db")
     sb.appendLine(generateGenArgv(effectMap, analyzer.enableCommute))
 
     for ((op, effectSet) in effectMap) {
@@ -190,7 +192,7 @@ fun loadArgv(effect: Effect, loadNext: Boolean = false): String {
 fun generateCondSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     if (!enableCommute)  {
         return """    def csop$suffix(self, state, argv):
-    return True
+        return True
 """
     } else {
 
