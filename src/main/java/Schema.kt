@@ -128,6 +128,23 @@ enum class Type {
             return "Type.${this.toString().toUpperCase()}"
         }
     }
+
+    fun defaultValue(): AbstractValue {
+        when (this) {
+            String -> {
+                return AbstractValue.Data(null, null, "")
+            }
+            Real -> {
+                return AbstractValue.Data(null, null, 0.0 to Double)
+            }
+            Int -> {
+                return AbstractValue.Data(null, null, 0 to Long)
+            }
+            Datetime -> {
+                return AbstractValue.Data(null, null, 0 to Long)
+            }
+        }
+    }
 }
 
 fun main() {

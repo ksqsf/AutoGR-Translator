@@ -76,7 +76,7 @@ sealed class Atom(val table: Table) {
             return "(DELETE $table $locators)"
         }
     }
-    class Insert(table: Table, val values: Map<Column, AbstractValue?>): Atom(table) {
+    class Insert(table: Table, var values: Map<Column, AbstractValue?>): Atom(table) {
         override fun toString(): String {
             return "(INSERT $table $values)"
         }

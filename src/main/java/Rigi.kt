@@ -272,14 +272,24 @@ fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
             }
             is Atom.Insert -> {
                 val table = atom.table
+
+                // RIGI seems to not handle NULL values. Give them default values.
+                atom.values = atom.values.map {
+                    if (it.value == null || it.value is AbstractValue.Null) {
+                        Pair(it.key, it.key.type.defaultValue())
+                    } else {
+                        Pair(it.key, it.value)
+                    }
+                }.toMap()
+
                 sb.append(loadInsertValues(atom))
-                val validColumns = atom.values.filter {
-                    it.value != null && (it.value !is AbstractValue.Null)
-                }.map { it.key }
+
+                val validColumns = atom.values.map { it.key }
+
                 val firstPKey = table.pkeys[0].intersect(validColumns)
                 val locator = validColumns.filter { firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
                 val otherKeys = validColumns.filter { !firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
-                if (enableCommute) {
+                if (!enableCommute) {
                     sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys})")
                 } else {
                     sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys, '__ts': now})")
