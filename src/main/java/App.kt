@@ -23,7 +23,7 @@ typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
 
 class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
-    val enableCommute: Boolean = false
+    val enableCommute: Boolean = true
     val intergraph: InterGraph
     val intragraphs: IntraGraphSet
     val schema = Schema()
@@ -197,6 +197,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             g.addEdgeId(bodyG.exitId, g.entryId)
             g.addEdgeId(bodyG.breakId, g.exitId)
             g.addEdgeId(bodyG.continueId, g.entryId)
+            g.loopCnt += 1
             return g
         }
 
@@ -218,6 +219,7 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             }
             g.addEdgeId(bodyG.continueId, bodyG.exitId)
             g.addEdgeId(bodyG.breakId, g.exitId)
+            g.loopCnt += 1
             return g
         }
 

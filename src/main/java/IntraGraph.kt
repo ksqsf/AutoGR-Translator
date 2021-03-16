@@ -79,6 +79,8 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
     var breakId: Int = newId()
     var continueId: Int = newId()
 
+    var loopCnt = 0
+
     fun isSpecial(id: Int): Boolean {
         return id == entryId || id == exitId || id == returnId || id == exceptId || id == breakId || id == continueId
     }
@@ -179,6 +181,7 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
             mergeId(this.exceptId, rhs.exceptId)
         if (mergeContinue)
             mergeId(this.continueId, rhs.continueId)
+        this.loopCnt += rhs.loopCnt
     }
 
     /**
