@@ -361,8 +361,20 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return "(db ${column.table.name}.${column.name})"
         }
 
+//        override fun toRigi(): String {
+//            return "${column.table.name}_${column.name}"
+//        }
+
         override fun toRigi(): String {
-            return "${column.table.name}_${column.name}"
+            if (query == null) {
+                return "${column.table.name}_${column.name}"
+            }
+
+            assert(query.tables.size == 1)
+            val table = column.table
+            val locators = whereToLocators(query.stmt, table, query.select.where)
+            val locatorStr = locatorsToRigi(locators)
+            return "state['TABLE_${table.name}'].get($locatorStr, '${column.name}')"
         }
     }
 
