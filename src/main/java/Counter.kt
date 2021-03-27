@@ -1,25 +1,25 @@
 import com.github.javaparser.ast.expr.MethodCallExpr
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 
-fun main() {
-    //val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
-//    val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
-    val projectRoot = "/Users/kaima/src/HealthPlus/src/main/java/"
-    val analyzer = Analyzer(projectRoot)
-
-    // analyzer.graphviz()
-
-//    var explicitRollbackCnt = countExplicitRollback(analyzer)
-    val multipleCommits = countMultipleCommits(analyzer)
-    val effectInCatch = countEffectInCatch(analyzer)
-//    var localStateDepCnt = countLocalStateDep(analyzer)
-
-    println("====================")
-    println("     STATISTICS")
-    println("====================")
-    println("Multiple Commit    ${multipleCommits.size}")
-    println("Effect In Catch    ${effectInCatch.size}")
-}
+//fun main() {
+//    //val projectRoot = "/Users/kaima/src/translator/src/main/resources/"
+////    val projectRoot = "/Users/kaima/src/RedBlue_consistency/src/applications/RUBiStxmud/Servlets/edu"
+//    val projectRoot = "/Users/kaima/src/HealthPlus/src/main/java/"
+//    val analyzer = Analyzer(projectRoot)
+//
+//    // analyzer.graphviz()
+//
+////    var explicitRollbackCnt = countExplicitRollback(analyzer)
+//    val multipleCommits = countMultipleCommits(analyzer)
+//    val effectInCatch = countEffectInCatch(analyzer)
+////    var localStateDepCnt = countLocalStateDep(analyzer)
+//
+//    println("====================")
+//    println("     STATISTICS")
+//    println("====================")
+//    println("Multiple Commit    ${multipleCommits.size}")
+//    println("Effect In Catch    ${effectInCatch.size}")
+//}
 
 // A condition is said to be local-dependent if it contains local states.
 fun countLocalStateDep(analyzer: Analyzer): Int {

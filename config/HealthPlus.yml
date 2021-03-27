@@ -1,0 +1,19 @@
+analyzer:
+  # Essential
+  project_root: /Users/kaima/src/HealthPlus/src/main/java
+  schema_files:
+    - /Users/kaima/src/HealthPlus/database/hms_db.sql
+
+  # TODO: this doesn't work yet
+  additional_class_paths:
+    - /Users/kaima/src/HealthPlus/target/classes
+
+  # Enable optimizations to improve commutativity?
+  opt: false
+
+  graphviz:
+    intergraph:
+      output: true
+      onlyEffect: false
+    intragraph:
+      output: true

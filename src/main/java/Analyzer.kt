@@ -14,6 +14,9 @@ import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSol
 import com.github.javaparser.symbolsolver.resolution.typesolvers.MemoryTypeSolver
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver
 import com.github.javaparser.utils.SourceRoot
+import com.uchuhimo.konf.Config
+import com.uchuhimo.konf.ConfigSpec
+import com.uchuhimo.konf.source.yaml
 import io.github.classgraph.ClassGraph
 import io.github.classgraph.MethodInfo
 import io.github.classgraph.ScanResult
@@ -22,13 +25,53 @@ import java.nio.file.Path
 typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
 
-class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
-    val enableCommute: Boolean = true
+object AnalyzerSpec : ConfigSpec() {
+    val projectRoot by required<String>()
+    val schemaFiles by required<List<String>>()
+    val additionalClassPaths by optional(listOf<String>())
+    val opt by optional(false)
+
+    object Graphviz : ConfigSpec() {
+        object Intragraph : ConfigSpec() {
+            val output by optional(false)
+        }
+        object Intergraph : ConfigSpec() {
+            val output by optional(false)
+            val onlyEffect by optional(true)
+        }
+    }
+}
+
+fun main() {
+    val defaultConfigFile = "/Users/kaima/src/translator/config/HealthPlus.yml"
+    val config = Config { addSpec(AnalyzerSpec) }.from.yaml.file(defaultConfigFile)
+
+    val analyzer = Analyzer(config)
+    analyzer.graphviz()
+
+//    for (effect in analyzer.intergraph.effect) {
+//        println("* Effect $effect")
+//        val g = analyzer.intragraphs[effect] ?: continue
+//        println(g.collectEffectPaths())
+//    }
+
+}
+
+class Analyzer(val cfg: Config, buildInterGraph: Boolean = true) {
+    val enableCommute: Boolean = cfg[AnalyzerSpec.opt]
     val intergraph: InterGraph
     val intragraphs: IntraGraphSet
     val schema = Schema()
 
     init {
+        // Load schema files
+        val schemaFiles = cfg[AnalyzerSpec.schemaFiles]
+        for (schema in schemaFiles) {
+            loadSchema(schema)
+        }
+
+        // Parse
+        val additionalClassPaths = cfg[AnalyzerSpec.additionalClassPaths]
         val typeSolver = CombinedTypeSolver(
             MemoryTypeSolver(),
             ReflectionTypeSolver(),
@@ -36,11 +79,12 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
         )
         val symbolSolver = JavaSymbolSolver(typeSolver)
 
-        val config = ParserConfiguration()
-        config.setSymbolResolver(symbolSolver)
+        val parserCfg = ParserConfiguration()
+        parserCfg.setSymbolResolver(symbolSolver)
 
+        val projectRoot = cfg[AnalyzerSpec.projectRoot]
         val project = SourceRoot(Path.of(projectRoot))
-        project.parserConfiguration = config
+        project.parserConfiguration = parserCfg
 
         Timer.start("parse")
         val results = project.tryToParseParallelized()
@@ -93,8 +137,16 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
     }
 
     fun graphviz() {
-        println("Visualizing intergraph...")
-        intergraph.graphviz(onlyEffect = true)
+        if (cfg[AnalyzerSpec.Graphviz.Intergraph.output]) {
+            println("Visualizing intergraph...")
+            intergraph.graphviz(cfg[AnalyzerSpec.Graphviz.Intergraph.onlyEffect])
+        }
+
+        if (!cfg[AnalyzerSpec.Graphviz.Intragraph.output]) {
+            return
+        }
+        println("Visualizing intragraph...")
+
         val cnt = mutableMapOf<QualifiedName, Int>()
         val normalize = { str: String -> quote(str).takeWhile { it != '(' } }
         val subprocesses = mutableListOf<Process>()
@@ -102,7 +154,6 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
             println("Visualizing $qn...")
             cnt.putIfAbsent(qn, 0)
             cnt[qn] = cnt[qn]!! + 1
-//            val proc = g.graphviz(qn.substring(24) + "${cnt[qn]}")
             val proc = g.graphviz(qn + "${cnt[qn]}")
             subprocesses.add(proc)
         }
@@ -116,22 +167,6 @@ class Analyzer(projectRoot: String, buildInterGraph: Boolean = true) {
         schema.loadFile(schemaFile)
         Timer.end("db")
     }
-}
-
-fun main() {
-    val projectRoot = "/Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/procedures"
-    val ddl = "/Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/ddls/healthplus-ddl.sql"
-
-    val analyzer = Analyzer(projectRoot)
-    // analyzer.graphviz()
-    analyzer.loadSchema(ddl)
-
-    for (effect in analyzer.intergraph.effect) {
-        println("* Effect $effect")
-        val g = analyzer.intragraphs[effect] ?: continue
-        println(g.collectEffectPaths())
-    }
-
 }
 
 /**
