@@ -87,7 +87,7 @@ class Analyzer(val cfg: Config, buildInterGraph: Boolean = true) {
         project.parserConfiguration = parserCfg
 
         Timer.start("parse")
-        val results = project.tryToParseParallelized()
+        val results = project.tryToParse()
         Timer.end("parse")
 
         val projectFiles = project.compilationUnits
@@ -193,11 +193,18 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
         override fun visit(call: MethodCallExpr, arg: Void?): List<ResolvedType>? {
             val args = call.arguments
             val argExc = args.mapNotNull { it.accept(this, arg) }.flatten()
-            val resolvedCall = call.resolve()
-            val res = (resolvedCall.specifiedExceptions + argExc).filterNotNull()
-            if (res.isNotEmpty())
-                return res
-            return null
+            try {
+                val resolvedCall = call.resolve()
+                val res = (resolvedCall.specifiedExceptions + argExc).filterNotNull()
+                if (res.isNotEmpty())
+                    return res
+                else
+                    return null
+            } catch (e: Exception) {
+                println("[WARN] ignore $call due to $e")
+                // FIXME
+                return null
+            }
         }
     }
 
@@ -392,7 +399,18 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
  * Class Hierarchy Analysis
  */
 fun chaResolve(expr: MethodCallExpr, classGraph: ScanResult): List<String> {
-    val decl = expr.resolve()
+    val decl: ResolvedMethodDeclaration?
+    try {
+        decl = expr.resolve()
+    } catch (e : Exception) {
+        // JavaParser cannot resolve some method calls. Just ignore them here.
+        if (expr.name.asString().contains("get")) {
+            println("[WARN] ignore $expr due to $e")
+            return emptyList()
+        } else {
+            throw e
+        }
+    }
     val result = mutableListOf<String>()
     if (decl.isStatic || expr.scope.isPresent && expr.scope.get().isSuperExpr) {
         // Java Symbol Solver can handle `super`

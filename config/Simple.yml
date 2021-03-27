@@ -1,0 +1,11 @@
+analyzer:
+  project_root: /Users/kaima/src/translator/src/main/resources
+  schema_files: []
+  additional_class_paths: []
+  opt: false
+  graphviz:
+    intergraph:
+      output: false
+      onlyEffect: false
+    intragraph:
+      output: false
