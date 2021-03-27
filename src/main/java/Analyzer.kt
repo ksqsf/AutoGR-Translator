@@ -7,6 +7,7 @@ import com.github.javaparser.ast.expr.*
 import com.github.javaparser.ast.stmt.*
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter
+import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration
 import com.github.javaparser.resolution.types.ResolvedType
 import com.github.javaparser.symbolsolver.JavaSymbolSolver
 import com.github.javaparser.symbolsolver.resolution.typesolvers.ClassLoaderTypeSolver
@@ -20,6 +21,7 @@ import com.uchuhimo.konf.source.yaml
 import io.github.classgraph.ClassGraph
 import io.github.classgraph.MethodInfo
 import io.github.classgraph.ScanResult
+import java.lang.Exception
 import java.nio.file.Path
 
 typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
@@ -29,6 +31,7 @@ object AnalyzerSpec : ConfigSpec() {
     val projectRoot by required<String>()
     val schemaFiles by required<List<String>>()
     val additionalClassPaths by optional(listOf<String>())
+    val additionalBasicEffects by optional(listOf<String>())
     val opt by optional(false)
 
     object Graphviz : ConfigSpec() {
@@ -42,18 +45,24 @@ object AnalyzerSpec : ConfigSpec() {
     }
 }
 
+object RigiSpec : ConfigSpec() {
+    val generate by optional(false)
+    val outputFile by required<String>()
+}
+
 fun main() {
     val defaultConfigFile = "/Users/kaima/src/translator/config/HealthPlus.yml"
-    val config = Config { addSpec(AnalyzerSpec) }.from.yaml.file(defaultConfigFile)
+    val config = Config { addSpec(AnalyzerSpec); addSpec(RigiSpec) }
+        .from.yaml.file(defaultConfigFile)
+
+    println("Reading analyzer config from $defaultConfigFile")
 
     val analyzer = Analyzer(config)
     analyzer.graphviz()
 
-//    for (effect in analyzer.intergraph.effect) {
-//        println("* Effect $effect")
-//        val g = analyzer.intragraphs[effect] ?: continue
-//        println(g.collectEffectPaths())
-//    }
+    for (effect in analyzer.nontrivialEffects()) {
+        println("* Effectual method $effect")
+    }
 
 }
 
@@ -120,7 +129,7 @@ class Analyzer(val cfg: Config, buildInterGraph: Boolean = true) {
         val basicEffects = listOf(
             "java.sql.PreparedStatement.executeUpdate",
             "java.sql.Statement.executeUpdate"
-        )
+        ) + cfg[AnalyzerSpec.additionalBasicEffects]
         Timer.start("effect-collection")
         basicEffects.forEach { intergraph.markNameAsEffect(it) }
         Timer.end("effect-collection")
@@ -166,6 +175,21 @@ class Analyzer(val cfg: Config, buildInterGraph: Boolean = true) {
         Timer.start("db")
         schema.loadFile(schemaFile)
         Timer.end("db")
+    }
+
+    fun nontrivialEffects(): List<QualifiedName> {
+        val res = mutableListOf<QualifiedName>()
+        for (e in intergraph.effect) {
+            if (intragraphs[e] == null)
+                continue
+            for (basic in cfg[AnalyzerSpec.additionalBasicEffects]) {
+                if (e.startsWith(basic)) {
+                    continue
+                }
+            }
+            res.add(e)
+        }
+        return res
     }
 }
 

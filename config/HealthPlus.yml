@@ -8,12 +8,26 @@ analyzer:
   additional_class_paths:
     - /Users/kaima/src/HealthPlus/target/classes
 
+  additional_basic_effects:
+    - com.hms.hms_test_2.DatabaseOperator.addTableRow
+    - com.hms.hms_test_2.DatabaseOperator.deleteTableRow
+    - com.hms.hms_test_2.DatabaseOperator.customDeletion
+    - com.hms.hms_test_2.DatabaseOperator.customInsertion
+
   # Enable optimizations to improve commutativity?
   opt: false
+
+  exclude_classes:
+    - com.hms.hms_test_2.DatabaseOperator
+    - com.hms.hms_test_2.User
 
   graphviz:
     intergraph:
       output: true
-      onlyEffect: false
+      onlyEffect: true
     intragraph:
-      output: true
+      output: false
+
+rigi:
+  generate: false
+  output_file: /tmp/output.py
