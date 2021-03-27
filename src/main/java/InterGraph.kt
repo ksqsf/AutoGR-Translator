@@ -61,11 +61,11 @@ class InterGraph {
                 continue
             }
             for (callee in callees) {
-                s += "\"${caller}\" -> \"${callee}\";"
+                s += "  \"${caller}\" -> \"${callee}\";\n"
             }
         }
         for (e in effect) {
-            s += "\"$e\" [color=red];"
+            s += "  \"$e\" [color=red];\n"
         }
         f.writeText("digraph G {\n$s\n}\n")
         val r = Runtime.getRuntime().exec("dot -Tpng /tmp/INTERGRAPH.dot -O")
