@@ -14,6 +14,17 @@ analyzer:
     - com.hms.hms_test_2.DatabaseOperator.customDeletion
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
 
+  additional_basic_updates:
+    - com.hms.hms_test_2.DatabaseOperator.customInsertion
+
+  additional_semantics:
+    - HealthPlus
+
+  debug:
+    build_intergraph: false
+    only_effects:
+      - Doctor.Doctor.updateAccountInfo(java.lang.String)
+
   # Enable optimizations to improve commutativity?
   opt: false
 
@@ -23,7 +34,7 @@ analyzer:
 
   graphviz:
     intergraph:
-      output: true
+      output: false
       onlyEffect: true
     intragraph:
       output: false

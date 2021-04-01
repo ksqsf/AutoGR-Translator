@@ -32,6 +32,8 @@ object AnalyzerSpec : ConfigSpec() {
     val schemaFiles by required<List<String>>()
     val additionalClassPaths by optional(listOf<String>())
     val additionalBasicEffects by optional(listOf<String>())
+    val additionalBasicUpdates by optional(listOf<String>())
+    val additionalSemantics by optional(listOf<String>())
     val opt by optional(false)
 
     object Graphviz : ConfigSpec() {
@@ -42,6 +44,11 @@ object AnalyzerSpec : ConfigSpec() {
             val output by optional(false)
             val onlyEffect by optional(true)
         }
+    }
+
+    object Debug : ConfigSpec() {
+        val buildIntergraph by optional(true)
+        val onlyEffects by optional(emptyList<String>())
     }
 }
 
@@ -57,16 +64,35 @@ fun main() {
 
     println("Reading analyzer config from $defaultConfigFile")
 
+    // Basic updates
+    basicUpdates += config[AnalyzerSpec.additionalBasicUpdates]
+
+    // Register additional semantics
+    for (semantics in config[AnalyzerSpec.additionalSemantics]) {
+        when (semantics.toLowerCase()) {
+            "healthplus" -> AppSemantics.registerHealthPlusSemantics()
+        }
+    }
+
+    // Start the analyzer
     val analyzer = Analyzer(config)
     analyzer.graphviz()
 
-    for (effect in analyzer.nontrivialEffects()) {
+    val effects = if (config[AnalyzerSpec.Debug.onlyEffects].isNotEmpty()) {
+        config[AnalyzerSpec.Debug.onlyEffects]
+    } else {
+        analyzer.nontrivialEffects()
+    }
+    for (effect in effects) {
         println("* Effectual method $effect")
+        val g = analyzer.intragraphs[effect] ?: continue
+        val es = g.collectEffectPaths()
+        println(es)
     }
 
 }
 
-class Analyzer(val cfg: Config, buildInterGraph: Boolean = true) {
+class Analyzer(val cfg: Config) {
     val enableCommute: Boolean = cfg[AnalyzerSpec.opt]
     val intergraph: InterGraph
     val intragraphs: IntraGraphSet
@@ -118,7 +144,7 @@ class Analyzer(val cfg: Config, buildInterGraph: Boolean = true) {
         // Step 1. Construct interprocedural call graph for the project
         Timer.start("call-graph")
         intergraph = InterGraph()
-        if (buildInterGraph) {
+        if (cfg[AnalyzerSpec.Debug.buildIntergraph]) {
             for (file in projectFiles) {
                 println("Intergraph: ${file.storage.get().fileName}")
                 val fileG = buildInterGraph(file)
@@ -146,7 +172,7 @@ class Analyzer(val cfg: Config, buildInterGraph: Boolean = true) {
     }
 
     fun graphviz() {
-        if (cfg[AnalyzerSpec.Graphviz.Intergraph.output]) {
+        if (cfg[AnalyzerSpec.Graphviz.Intergraph.output] && cfg[AnalyzerSpec.Debug.buildIntergraph]) {
             println("Visualizing intergraph...")
             intergraph.graphviz(cfg[AnalyzerSpec.Graphviz.Intergraph.onlyEffect])
         }

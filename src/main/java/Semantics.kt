@@ -18,7 +18,7 @@ import net.sf.jsqlparser.statement.update.Update
 import net.sf.jsqlparser.util.TablesNamesFinder
 import java.lang.IllegalArgumentException
 
-val basicUpdates = setOf(
+val basicUpdates = mutableSetOf(
     "java.sql.Statement.executeUpdate",
     "java.sql.PreparedStatement.executeUpdate"
 )
@@ -78,7 +78,7 @@ fun containsRollback(s: Statement): Boolean {
     return containsCall(basicRollback, s)
 }
 
-val knownSemantics = mapOf(
+val knownSemantics = mutableMapOf(
     "java.sql.Connection.prepareStatement" to ::prepareStatementSemantics,
     "java.sql.PreparedStatement.executeQuery" to ::executeQuerySemantics,
     "java.sql.PreparedStatement.executeUpdate" to ::executeUpdateSemantics,
