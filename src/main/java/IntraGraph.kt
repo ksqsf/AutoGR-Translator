@@ -478,4 +478,88 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
         }
         return paths.mapValues { it.value.toSet() }.toMap()
     }
+
+    fun collectLoops(): LoopSet {
+        // Compute startTime and endTime
+        val startTime = mutableMapOf<Int, Int>()
+        val endTime = mutableMapOf<Int, Int>()
+        var time = 0
+        val visited = mutableSetOf<Int>()
+        fun DFS1(cur: Int) {
+            time += 1
+            startTime[cur] = time
+            visited.add(cur)
+            for (edge in graph[cur] ?: emptySet()) {
+                val next = edge.next
+                if (!visited.contains(next)) {
+                    DFS1(next)
+                }
+            }
+            time += 1
+            endTime[cur] = time
+        }
+        DFS1(entryId)
+
+        // Compute SCC.
+        // If outstanding = [ a, b, c, d, b ]
+        // then we found a SCC { b, c, d }, which is a loop.
+        // The loop base is the node with smallest startTime.
+        val outstanding = mutableListOf<Int>()
+        val sccs = mutableSetOf<Set<Int>>()
+        fun DFS2(cur: Int) {
+            if (outstanding.contains(cur)) {
+                val i = outstanding.indexOf(cur)
+                val scc = outstanding.subList(i, outstanding.size).toSet()
+                println(scc)
+                return
+            }
+            val nextUnsorted = mutableListOf<Int>()
+            for (edge in rgraph[cur] ?: emptySet()) {
+                nextUnsorted.add(edge.next)
+            }
+            val nexts = nextUnsorted.distinct().sortedBy { endTime[it]!! }
+            outstanding.add(cur)
+            for (next in nexts) {
+                DFS2(next)
+            }
+            outstanding.removeLast()
+        }
+        DFS2(exitId)
+
+        // Convert SCC into a loop info
+        fun loopBaseOf(scc: Set<Int>): Int {
+            var base = scc.first()
+            var minStart = startTime[base]!!
+            for (x in scc) {
+                if (startTime[x]!! < minStart) {
+                    minStart = startTime[x]!!
+                    base = x
+                }
+            }
+            return base
+        }
+        val loops = mutableSetOf<LoopInfo>()
+        for (scc in sccs) {
+            val base = loopBaseOf(scc)
+            val body = scc - base
+            loops.add(LoopInfo(base, body))
+        }
+        return LoopSet(loops)
+    }
+}
+
+data class LoopInfo(val base: Int, val body: Set<Int>) {
+    fun contains(x: Int): Boolean {
+        return base == x || body.contains(x)
+    }
+}
+
+data class LoopSet(val loops: Set<LoopInfo>) {
+    fun findLoop(x: Int) : LoopSet {
+        return LoopSet(loops.filter { it.contains(x) }.toSet())
+    }
+
+    fun isEmpty(): Boolean {
+        return loops.isEmpty()
+    }
 }
