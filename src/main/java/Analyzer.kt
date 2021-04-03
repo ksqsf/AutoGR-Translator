@@ -437,7 +437,8 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             if (decl.body.isPresent) {
                 val g = decl.body.get().accept(blockVisitor, classDef)
                 g.optimize()
-                gs.put(qname, g)
+                g.collectLoops()
+                gs[qname] = g
             }
         }
     }

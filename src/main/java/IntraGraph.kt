@@ -54,6 +54,7 @@ sealed class Label {
  * A node is:
  * 1. a line of code ([ExpressionStmt])
  * 2. an empty node, which can be `entry`, `exit`, `return`, or `except`.
+ * An empty node is either an entry or an exit, and never will be between two 'real' nodes.
  * Each node has a unique (program-wise) ID.
  *
  * Edges between nodes are labeled path conditions. A path condition can either be:
@@ -346,9 +347,8 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
             }
         }
 
-        val normalize = {
-            str: String ->
-            str.takeWhile { it != '(' }
+        val normalize = { s: String ->
+            s.takeWhile { it != '(' }
         }
 
         val f = File("/tmp/${normalize(name)}.dot", )
@@ -479,7 +479,18 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
         return paths.mapValues { it.value.toSet() }.toMap()
     }
 
-    fun collectLoops(): LoopSet {
+    private var memoizedLoopSet : LoopSet? = null
+
+    /**
+     * Collect loop information of this intragraph. It outputs a set of SCCs (of node IDs). The result is cached for
+     * future calls.
+     *
+     * @param refresh Force this method to recompute the loop set.
+     */
+    fun collectLoops(refresh: Boolean = false): LoopSet {
+        if (!refresh && memoizedLoopSet != null)
+            return memoizedLoopSet!!
+
         // Compute startTime and endTime
         val startTime = mutableMapOf<Int, Int>()
         val endTime = mutableMapOf<Int, Int>()
@@ -510,7 +521,7 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
             if (outstanding.contains(cur)) {
                 val i = outstanding.indexOf(cur)
                 val scc = outstanding.subList(i, outstanding.size).toSet()
-                println(scc)
+                sccs.add(scc)
                 return
             }
             val nextUnsorted = mutableListOf<Int>()
@@ -544,22 +555,44 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
             val body = scc - base
             loops.add(LoopInfo(base, body))
         }
-        return LoopSet(loops)
+        memoizedLoopSet = LoopSet(loops)
+        return memoizedLoopSet!!
     }
 }
 
 data class LoopInfo(val base: Int, val body: Set<Int>) {
     fun contains(x: Int): Boolean {
-        return base == x || body.contains(x)
+        return base == x || containsBody(x)
+    }
+
+    fun containsBody(x: Int): Boolean {
+        return body.contains(x)
     }
 }
 
 data class LoopSet(val loops: Set<LoopInfo>) {
-    fun findLoop(x: Int) : LoopSet {
+    operator fun iterator(): Iterator<LoopInfo> {
+        return loops.iterator()
+    }
+
+    fun filterContains(x: Int): LoopSet {
         return LoopSet(loops.filter { it.contains(x) }.toSet())
     }
 
     fun isEmpty(): Boolean {
         return loops.isEmpty()
+    }
+
+    fun nested(base: Int): Boolean {
+        val containers = filterContains(base)
+        for (loop in containers) {
+            if (base != loop.base)
+                return true
+        }
+        return false
+    }
+
+    fun nested(loop: LoopInfo): Boolean {
+        return nested(loop.base)
     }
 }
