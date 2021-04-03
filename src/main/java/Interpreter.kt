@@ -7,7 +7,20 @@ import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter
 import java.lang.IllegalArgumentException
 
-typealias Scope = MutableMap<String, AbstractValue>
+/**
+ * A variable corresponds to a variable definition (statically), or the storage (dynamically).
+ */
+data class Variable(var value: AbstractValue? = null) {
+    fun get(): AbstractValue {
+        return value!!
+    }
+
+    fun set(v: AbstractValue) {
+        value = v
+    }
+}
+
+typealias Scope = MutableMap<String, Variable>
 
 fun emptyScope(): Scope {
     return mutableMapOf()
@@ -39,16 +52,12 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         while (dest > depth) {
             pushScope()
         }
-        // FIXME: fails this case:
-        // int a;
-        // if (cond) { a = 1; }
-        // use(a);
-//        while (dest < depth) {
-//            popScope()
-//        }
+        while (dest < depth) {
+            popScope()
+        }
     }
 
-    fun lookup(varName: String): AbstractValue? {
+    fun lookup(varName: String): Variable? {
         scope.reversed().forEach {
             if (it.containsKey(varName))
                 return it[varName]
@@ -56,8 +65,17 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         return null
     }
 
+    fun lookupOrCreate(varName: String): Variable {
+        val existing: Variable? = lookup(varName)
+        if (existing != null)
+            return existing
+        val new = Variable()
+        scope.last()[varName] = new
+        return new
+    }
+
     fun putVariable(varName: String, value: AbstractValue) {
-        scope.last()[varName] = value
+        lookupOrCreate(varName).set(value)
     }
 
     // null is returned when it's a variable declaration expression.
@@ -96,8 +114,9 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             // Variable
             override fun visit(expr: NameExpr, arg: Interpreter): AbstractValue {
                 val varName = expr.nameAsString
-                val value = lookup(varName)
-                if (value == null) {
+                val variable = lookup(varName)
+                // varName is undefined.
+                if (variable == null) {
                     val javaType = expr.calculateResolvedType()
                     // Free variables are arguments.
                     if (!effect.argv.contains(varName)) {
@@ -117,7 +136,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     }
                     return AbstractValue.Free(expr, javaType, varName)
                 } else {
-                    return value
+                    return variable.get()
                 }
             }
             override fun visit(expr: VariableDeclarator, arg: Interpreter): AbstractValue? {
