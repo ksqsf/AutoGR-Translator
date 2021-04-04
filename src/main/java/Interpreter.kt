@@ -259,6 +259,10 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             //
             // The following are expressions currently not supported.
             //
+            override fun visit(expr: ObjectCreationExpr, arg: Interpreter): AbstractValue {
+                println("[WARN] unknown ${expr::class}: $expr")
+                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+            }
             override fun visit(expr: ArrayAccessExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
                 return AbstractValue.Unknown(expr, expr.calculateResolvedType())
