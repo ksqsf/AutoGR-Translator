@@ -438,8 +438,8 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
         val vis = mutableSetOf<Int>()
         fun dfs(cur: Int, path: MutableList<OutEdge>, effect: Boolean) {
             // FIXME: cycle, this conflicts with branch
-//            if (vis.contains(cur))
-//                return
+            if (vis.contains(cur))
+                return
             vis.add(cur)
             if (cur == entryId) {
                 if (effect)
