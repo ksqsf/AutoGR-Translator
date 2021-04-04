@@ -16,14 +16,28 @@ analyzer:
 
   additional_basic_updates:
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
+    - com.hms.hms_test_2.DatabaseOperator.customSelection
+
+  exclude:
+    - com.hms.hms_test_2.DatabaseOperator.createDatabase
+    - com.hms.hms_test_2.DatabaseOperator.showDatabases
+    - com.hms.hms_test_2.DatabaseOperator.useDatabase
+    - com.hms.hms_test_2.DatabaseOperator.createTable
+    - com.hms.hms_test_2.DatabaseOperator.showTables
+    - com.hms.hms_test_2.DatabaseOperator.deleteDatabase
+    - com.hms.hms_test_2.DatabaseOperator.deleteTable
+    - com.hms.hms_test_2.DatabaseOperator.addTableRow
+    - com.hms.hms_test_2.DatabaseOperator.deleteTableRow
+    - com.hms.hms_test_2.DatabaseOperator.customInsertion
+    - com.hms.hms_test_2.DatabaseOperator.customDeletion
 
   additional_semantics:
     - HealthPlus
 
   debug:
-    build_intergraph: false
-    only_effects:
-      - Doctor.Doctor.updateAccountInfo(java.lang.String)
+    build_intergraph: true
+#    only_effects:
+#      - Doctor.Doctor.updateAccountInfo(java.lang.String)
 
   # Enable optimizations to improve commutativity?
   opt: false

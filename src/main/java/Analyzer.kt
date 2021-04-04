@@ -34,6 +34,7 @@ object AnalyzerSpec : ConfigSpec() {
     val additionalBasicEffects by optional(listOf<String>())
     val additionalBasicUpdates by optional(listOf<String>())
     val additionalSemantics by optional(listOf<String>())
+    val exclude by optional(listOf<String>())
     val opt by optional(false)
 
     object Graphviz : ConfigSpec() {
@@ -68,9 +69,11 @@ fun main() {
     basicUpdates += config[AnalyzerSpec.additionalBasicUpdates]
 
     // Register additional semantics
+    // FIXME: should use reflection
     for (semantics in config[AnalyzerSpec.additionalSemantics]) {
         when (semantics.toLowerCase()) {
             "healthplus" -> AppSemantics.registerHealthPlusSemantics()
+            else -> println("[WARN] unknown semantics ")
         }
     }
 
@@ -78,18 +81,28 @@ fun main() {
     val analyzer = Analyzer(config)
     analyzer.graphviz()
 
+    // Collect effects
     val effects = if (config[AnalyzerSpec.Debug.onlyEffects].isNotEmpty()) {
         config[AnalyzerSpec.Debug.onlyEffects]
     } else {
+        if (!config[AnalyzerSpec.Debug.buildIntergraph]) {
+            println("[WARN] Intergraph not built, no effects identified")
+        }
         analyzer.nontrivialEffects()
     }
-    for (effect in effects) {
-        println("* Effectual method $effect")
-        val g = analyzer.intragraphs[effect] ?: continue
+    for (effectMethodSig in effects) {
+        if (analyzer.excludes(effectMethodSig))
+            continue
+        println("* Effectual method $effectMethodSig")
+        val g = analyzer.intragraphs[effectMethodSig] ?: continue
         val es = g.collectEffectPaths()
-        println(es)
+        for ((_, pathSet) in es) {
+            for (path in pathSet) {
+                val effect = Effect(analyzer, path)
+                effect.tryToAnalyze()
+            }
+        }
     }
-
 }
 
 class Analyzer(val cfg: Config) {
@@ -216,6 +229,19 @@ class Analyzer(val cfg: Config) {
             res.add(e)
         }
         return res
+    }
+
+    /**
+     * Check if the given method signature is excluded from analysis.
+     *
+     * @param effectMethodSig
+     */
+    fun excludes(effectMethodSig: String): Boolean {
+        for (excluded in cfg[AnalyzerSpec.exclude]) {
+            if (effectMethodSig.startsWith(excluded))
+                return true
+        }
+        return false
     }
 }
 
@@ -437,7 +463,6 @@ fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
             if (decl.body.isPresent) {
                 val g = decl.body.get().accept(blockVisitor, classDef)
                 g.optimize()
-                g.collectLoops()
                 gs[qname] = g
             }
         }

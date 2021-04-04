@@ -293,6 +293,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return "(free $name)"
         }
 
+        override fun guessSql(): String {
+            return "?"
+        }
+
         override fun toRigi(): String {
             return "argv['@OP@']['$name']"
         }
