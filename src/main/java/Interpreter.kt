@@ -231,7 +231,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 val scope = methodCallExpr.scope.get()
                 if (scope !is NameExpr) {
                     println("[WARN] scope is complex: $methodCallExpr")
-                    return AbstractValue.Unknown(methodCallExpr, methodCallExpr.calculateResolvedType())
                 }
 
                 val receiver = evalExpr(scope)!!
