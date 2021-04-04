@@ -2,6 +2,7 @@ import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.ast.expr.MethodCallExpr
 import com.github.javaparser.ast.stmt.Statement
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
+import com.github.javaparser.resolution.UnsolvedSymbolException
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration
 import net.sf.jsqlparser.expression.JdbcParameter
 import net.sf.jsqlparser.expression.operators.arithmetic.Addition
@@ -24,14 +25,19 @@ val basicUpdates = mutableSetOf(
 )
 
 fun containsCall(nameSet: Set<QualifiedName>, s: Expression): Boolean {
-    return s.accept(object : GenericVisitorAdapter<Boolean, Void?>() {
-        override fun visit(m: MethodCallExpr, arg_: Void?): Boolean? {
-            if (nameSet.contains(m.resolve().qualifiedName)) {
-                return true
+    try {
+        return s.accept(object : GenericVisitorAdapter<Boolean, Void?>() {
+            override fun visit(m: MethodCallExpr, arg_: Void?): Boolean? {
+                if (nameSet.contains(m.resolve().qualifiedName)) {
+                    return true
+                }
+                return null
             }
-            return null
-        }
-    }, null) ?: return false
+        }, null) ?: return false
+    } catch (e: UnsolvedSymbolException) {
+        println("[WARN] unable to resolve $s")
+        return false
+    }
 }
 
 fun containsCall(nameSet: Set<QualifiedName>, s: Statement): Boolean {
