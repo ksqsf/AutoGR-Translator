@@ -12,7 +12,7 @@
         <maven.compiler.source>15</maven.compiler.source>
         <maven.compiler.target>15</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <kotlin.version>1.4.30-RC</kotlin.version>
+        <kotlin.version>1.4.32</kotlin.version>
         <kotlin.compiler.incremental>true</kotlin.compiler.incremental>
     </properties>
 
@@ -53,6 +53,11 @@
             <groupId>com.uchuhimo</groupId>
             <artifactId>konf</artifactId>
             <version>1.0.0</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.h0tk3y.betterParse</groupId>
+            <artifactId>better-parse-jvm</artifactId>
+            <version>0.4.1</version>
         </dependency>
     </dependencies>
 
