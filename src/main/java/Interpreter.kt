@@ -269,7 +269,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             }
             override fun visit(expr: ArrayInitializerExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                // Java Symbol Solver is incapable of inferring the array type.
+                return AbstractValue.Unknown(expr, null)
             }
             override fun visit(expr: ArrayCreationExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
