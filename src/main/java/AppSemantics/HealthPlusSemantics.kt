@@ -87,7 +87,7 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
  * E.g., `SELECT person_id FROM doctor WHERE slmc_reg_no = [[this.slmcRegNo]]` relies on a local state, so it's considered `Unknown`.
  * It will be translated as `doctor[slmc_reg_no=arg].person_id`.
  */
-fun evalTemplate(template: String, interpreter: Interpreter?): AbstractValue {
+fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type): AbstractValue {
     // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
     if (template.startsWith("'"))
         return AbstractValue.Data(null, null, template)
@@ -102,19 +102,19 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter): Abstract
 
     when (expr) {
         // Template-related reflection
-        is SqlInterpol -> return evalTemplate(expr.value, interpreter)
-        is SqlTemplateValue -> return evalTemplate(expr.tag, interpreter)
+        is SqlInterpol -> return evalTemplate(expr.value, interpreter, contextualType)
+        is SqlTemplateValue -> return evalTemplate(expr.tag, interpreter, contextualType)
         // Conventional SQL
         is SqlInt -> return AbstractValue.Data(null, null, expr.value)
         is SqlBool -> return AbstractValue.Data(null, null, expr.value)
-        is SqlSingleton -> return singletonToDbState(expr.query, table)
+        is SqlSingleton -> return singletonToDbState(expr.query, interpreter.schema)
         is SqlColRef -> {
-            val col = table.get(expr.column.name)!!
+            val col = table[expr.column.name]!!
             return AbstractValue.DbState(null, null, null, col, expr.column.aggregateKind)
         }
         is SqlBinary -> {
-            val left = evalSQLExpr(expr.left, table, interpreter)
-            val right = evalSQLExpr(expr.right, table, interpreter)
+            val left = evalSQLExpr(expr.left, table, interpreter, Type.Int)
+            val right = evalSQLExpr(expr.right, table, interpreter, Type.Int)
             return when (expr.op) {
                 SqlOperator.ADD -> left.add(null, right)
                 SqlOperator.SUB -> left.sub(null, right)
@@ -150,12 +150,12 @@ fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
     val values = mutableMapOf<Column, AbstractValue?>()
     if (update.columns == null) {
         for (tableCol in table.columns) {
-            values[tableCol] = AbstractValue.Free(null, null, "unknownTODO")
+            values[tableCol] = interpreter.freshArg("updateValue", tableCol.type)
         }
     } else {
         for (assn in update.columns) {
             val column = table[assn.column.name]!!
-            val value = evalSQLExpr(assn.value, table, interpreter)
+            val value = evalSQLExpr(assn.value, table, interpreter, column.type)
             values[column] = value
         }
     }
@@ -179,19 +179,19 @@ fun atomizeDelete(delete: SqlDelete, interpreter: Interpreter): Atom.Delete {
  * Unknown templates are translated into a list of `Free` arguments.
  */
 fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter): Atom.Insert {
-    val table = interpreter.schema.get(insert.table.name)!!
+    val table = interpreter.schema[insert.table.name]!!
     val values = mutableMapOf<Column, AbstractValue>()
     if (insert.values == null) {
         // NULL values correspond to `INSERT INTO table VALUES ([[...]])` or `INSERT INTO table([[...]]) VALUES ([[...]])`.
         for (column in table.columns) {
-            values[column] = AbstractValue.Free(null, null, "unknownTODO")
+            values[column] = interpreter.freshArg("insertValue", column.type)
         }
     } else {
         // NULL columns correspond to either `INSERT INTO table([[...]])` or `INSERT INTO table`. However, the first case
         // is already handled above.
         val columns = insert.columns?.map { table[it.name]!! } ?: table.columns
         for ((column, value) in columns zip insert.values) {
-            values[column] = evalSQLExpr(value, table, interpreter)
+            values[column] = evalSQLExpr(value, table, interpreter, column.type)
         }
     }
     return Atom.Insert(table, values)
@@ -208,7 +208,7 @@ fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Inter
     val res = mutableMapOf<Column, AbstractValue>()
     for (locator in locators) {
         val column = table[locator.column.name]!!
-        res[column] = evalSQLExpr(locator.value, table, interpreter)
+        res[column] = evalSQLExpr(locator.value, table, interpreter, column.type)
     }
     return res
 }
