@@ -57,13 +57,25 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
         next.add(effect)
     }
 
+    private fun introduceParameters() {
+        for (arg in sourcePath.intragraph.methodDecl.parameters) {
+            val av = AbstractValue.Free(null, null, arg.name.asString())
+            interpreter.putVariable(arg.name.asString(), av)
+            println("-free ${arg.name.asString()}")
+        }
+    }
+
     fun tryToAnalyze() {
 
         // sourcePath is a known effectual path.
         // 1. Build fields in the static class
         interpreter.runClass(sourcePath.intragraph.classDef)
 
-        // 2. Eval this path, and build an easier representation of its effect.
+        // 2. All parameters are declared free.
+        introduceParameters()
+        println("after introduce ${interpreter.lookup("userid")}")
+
+        // 3. Eval this path, and build an easier representation of its effect.
         interpreter.run(sourcePath)
 
     }

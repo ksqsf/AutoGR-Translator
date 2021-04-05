@@ -57,6 +57,11 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         }
     }
 
+    /**
+     * Find a variable definition with the specified name.
+     *
+     * @return null if not in scope.
+     */
     fun lookup(varName: String): Variable? {
         scope.reversed().forEach {
             if (it.containsKey(varName))
@@ -65,6 +70,10 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         return null
     }
 
+    /**
+     * Find a variable definition with specified name. If not in scope, create an empty variable definition at the current
+     * scope level, so that a new value could be filled.
+     */
     fun lookupOrCreate(varName: String): Variable {
         val existing: Variable? = lookup(varName)
         if (existing != null)
