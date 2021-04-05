@@ -19,7 +19,7 @@ class Schema {
     }
 
     fun get(name: String): Table? {
-        return tables[name] ?: tables["`$name`"]
+        return tables[name.removeSurrounding("`")]
     }
 
     fun getTables(): List<Table> {
@@ -57,7 +57,7 @@ class Schema {
 typealias PKey = Set<Column>
 
 class Table(val def: CreateTable) {
-    val name = def.table.name
+    val name = def.table.name.removeSurrounding("`")
     val columns = def.columnDefinitions.map { Column(it, this) }
     val pkeys = mutableListOf<PKey>()
 
@@ -65,9 +65,9 @@ class Table(val def: CreateTable) {
         return columns[i]
     }
 
-    fun get(name: String): Column? {
+    operator fun get(name: String): Column? {
         for (col in columns) {
-            if (col.name.equals(name, ignoreCase = true) || col.name.equals("`$name`", ignoreCase = true))
+            if (col.name.equals(name.removeSurrounding("`"), ignoreCase = true))
                 return col
         }
         return null
@@ -84,7 +84,7 @@ class Table(val def: CreateTable) {
 }
 
 class Column(val def: ColumnDefinition, val table: Table) {
-    val name: String = def.columnName
+    val name: String = def.columnName.removeSurrounding("`")
     val type = convertType()
     //var pkey = false
     val qualifiedName = "${table.name}_${name}"
