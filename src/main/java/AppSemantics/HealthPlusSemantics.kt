@@ -211,7 +211,12 @@ fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
     val values = mutableMapOf<Column, AbstractValue?>()
     if (update.columns == null) {
         for (tableCol in table.columns) {
-            values[tableCol] = interpreter.freshArg("updateValue", tableCol.type)
+            // Assume the update doesn't update the indexing key and the primary key itself.
+            // This assumption is true for HealthPlus, but is not universally true.
+            if (tableCol !in locators.keys && !tableCol.name.endsWith("id", ignoreCase = true) &&
+                    !tableCol.name.endsWith("no", ignoreCase = true)) {
+                values[tableCol] = interpreter.freshArg(tableCol.name, tableCol.type)
+            }
         }
     } else {
         for (assn in update.columns) {
