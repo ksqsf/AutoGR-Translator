@@ -2,9 +2,11 @@ package AppSemantics
 
 import AbstractValue
 import AggregateKind
+import Column
 import com.github.javaparser.ast.expr.Expression
 import knownSemantics
 import Interpreter
+import Table
 import java.lang.IllegalArgumentException
 import com.github.h0tk3y.betterParse.combinators.*
 import com.github.h0tk3y.betterParse.grammar.Grammar
@@ -25,7 +27,7 @@ import java.lang.RuntimeException
 //     "(SELECT user_id FROM doctor WHERE slmc_reg_no='" + this.slmcRegNo + "');"
 // The pluses totally mess up the AST structure, and column_data is entirely opaque.
 //
-// 1. We adopt a conservative analysis strategy, i.e. we think column_data of
+// 1. We adopt a conservative analysis strategy, i.e. we consider column_data
 //        field1 = argv[field1], field2 = argv[field2], ...
 //    Since argv are opaque to Z3, this is safe.
 //
@@ -40,19 +42,175 @@ import java.lang.RuntimeException
 fun registerHealthPlusSemantics() {
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.customInsertion"] = ::customInsertionSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.customSelection"] = ::customSelectionSemantics
+    knownSemantics["com.hms.hms_test_2.DatabaseOperator.addTableRow"] = ::addTableRowSemantics
+    knownSemantics["com.hms.hms_test_2.DatabaseOperator.deleteTableRow"] = ::deleteTableRowSemantics
 }
 
 // NOTE: Some UPDATE queries are actually handled by customInsertion.
 fun customInsertionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val approxSql = approximateSQL(args[0])
     println("Insertion Approx = $approxSql")
+    val atom = when (val sql = SqlGrammar.parseToEnd(approxSql)) {
+        is SqlInsert -> atomizeInsert(sql, env)
+        is SqlDelete -> atomizeDelete(sql, env)
+        is SqlUpdate -> atomizeUpdate(sql, env)
+        else -> throw RuntimeException("Invalid SQL AST class for customInsertion: ${sql::class} of $sql")
+    }
+    env.effect.addAtom(atom)
     return AbstractValue.Unknown(self, self.calculateResolvedType())
 }
 
 fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val approxSql = approximateSQL(args[0])
     println("Selection Approx = $approxSql")
+    return when (val sql = SqlGrammar.parseToEnd(approxSql)) {
+        is SqlSelect -> TODO()
+        is SqlJoinSelect -> TODO()
+        else -> throw RuntimeException("Invalid SQL AST class for customSelection: ${sql::class} of $sql")
+    }
+}
+
+fun addTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     return AbstractValue.Unknown(self, self.calculateResolvedType())
+}
+
+fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    return AbstractValue.Unknown(self, self.calculateResolvedType())
+}
+
+/**
+ * A template is a string containing `[[JavaExpr]]`, which indicates the evaluation result should be inserted here.
+ * `'[[Expr]]'` indicates the result should be cast to [String].
+ *
+ * If the expression is unable to be evaluated, it's considered `Unknown` and an argument will be added for it.
+ *
+ * E.g., `SELECT person_id FROM doctor WHERE slmc_reg_no = [[this.slmcRegNo]]` relies on a local state, so it's considered `Unknown`.
+ * It will be translated as `doctor[slmc_reg_no=arg].person_id`.
+ */
+fun evalTemplate(template: String, interpreter: Interpreter?): AbstractValue {
+    // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
+    if (template.startsWith("'"))
+        return AbstractValue.Data(null, null, template)
+    TODO("evalTemplate")
+}
+
+fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter): AbstractValue {
+    fun singletonToDbState(select: SqlSelect, table: Table): AbstractValue.DbState {
+        val col = select.columns!![0] as SqlSingleColumn
+        return AbstractValue.DbState(null, null, null, table[col.name]!!, col.aggregateKind)
+    }
+
+    when (expr) {
+        // Template-related reflection
+        is SqlInterpol -> return evalTemplate(expr.value, interpreter)
+        is SqlTemplateValue -> return evalTemplate(expr.tag, interpreter)
+        // Conventional SQL
+        is SqlInt -> return AbstractValue.Data(null, null, expr.value)
+        is SqlBool -> return AbstractValue.Data(null, null, expr.value)
+        is SqlSingleton -> return singletonToDbState(expr.query, table)
+        is SqlColRef -> {
+            val col = table.get(expr.column.name)!!
+            return AbstractValue.DbState(null, null, null, col, expr.column.aggregateKind)
+        }
+        is SqlBinary -> {
+            val left = evalSQLExpr(expr.left, table, interpreter)
+            val right = evalSQLExpr(expr.right, table, interpreter)
+            return when (expr.op) {
+                SqlOperator.ADD -> left.add(null, right)
+                SqlOperator.SUB -> left.sub(null, right)
+                SqlOperator.MUL -> left.mul(null, right)
+                SqlOperator.DIV -> left.div(null, right)
+                SqlOperator.EQ -> left.eq(null, right)
+                SqlOperator.LT -> left.lt(null, right)
+                SqlOperator.LE -> left.le(null, right)
+                SqlOperator.GT -> left.gt(null, right)
+                SqlOperator.GE -> left.ge(null, right)
+            }
+        }
+        is SqlFunc -> return dispatchSQLFunc(expr.funcName, expr.args)
+    }
+}
+
+fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
+    if (funcName.equals("now", ignoreCase = true)) {
+        return AbstractValue.Free(null, null, "now")
+    } else {
+        throw IllegalArgumentException("Unknown SQL function $funcName")
+    }
+}
+
+/**
+ * Convert a [SqlUpdate] object into an [Atom] object. Nested SELECTs are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
+ *
+ * Unknown templates are translated into a list of `Free` arguments.
+ */
+fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
+    val table = interpreter.schema.get(update.table.name)!!
+    val locators = convertLocators(update.locators, table, interpreter)
+    val values = mutableMapOf<Column, AbstractValue?>()
+    if (update.columns == null) {
+        for (tableCol in table.columns) {
+            values[tableCol] = AbstractValue.Free(null, null, "unknownTODO")
+        }
+    } else {
+        for (assn in update.columns) {
+            val column = table[assn.column.name]!!
+            val value = evalSQLExpr(assn.value, table, interpreter)
+            values[column] = value
+        }
+    }
+    return Atom.Update(table, locators, values)
+}
+
+/**
+ * Convert a [SqlDelete] object into an [Atom] object. Nested SELECTs are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
+ *
+ * Unknown templates are translated into a list of `Free` arguments.
+ */
+fun atomizeDelete(delete: SqlDelete, interpreter: Interpreter): Atom.Delete {
+    val table = interpreter.schema.get(delete.table.name)!!
+    val locators = convertLocators(delete.locators, table, interpreter)
+    return Atom.Delete(table, locators)
+}
+
+/**
+ * Convert a [SqlInsert] object into an [Atom] object.
+ *
+ * Unknown templates are translated into a list of `Free` arguments.
+ */
+fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter): Atom.Insert {
+    val table = interpreter.schema.get(insert.table.name)!!
+    val values = mutableMapOf<Column, AbstractValue>()
+    if (insert.values == null) {
+        // NULL values correspond to `INSERT INTO table VALUES ([[...]])` or `INSERT INTO table([[...]]) VALUES ([[...]])`.
+        for (column in table.columns) {
+            values[column] = AbstractValue.Free(null, null, "unknownTODO")
+        }
+    } else {
+        // NULL columns correspond to either `INSERT INTO table([[...]])` or `INSERT INTO table`. However, the first case
+        // is already handled above.
+        val columns = insert.columns?.map { table[it.name]!! } ?: table.columns
+        for ((column, value) in columns zip insert.values) {
+            values[column] = evalSQLExpr(value, table, interpreter)
+        }
+    }
+    return Atom.Insert(table, values)
+}
+
+/**
+ * Convert a list of [SqlLocator]s into the [Effect]-style locator set.
+ *
+ * @param locators
+ * @param table the default table to which the 'naked' column refers
+ * @param interpreter
+ */
+fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Interpreter): Map<Column, AbstractValue> {
+    val res = mutableMapOf<Column, AbstractValue>()
+    for (locator in locators) {
+        val column = table[locator.column.name]!!
+        res[column] = evalSQLExpr(locator.value, table, interpreter)
+    }
+    return res
 }
 
 var cnt = 0
@@ -102,6 +260,9 @@ fun approximateSQL(av: AbstractValue): String {
     }
 }
 
+//
+// Custom SQL parser.
+//
 enum class SqlOperator {
     EQ, LT, GT, LE, GE, ADD, SUB, MUL, DIV;
 
@@ -362,174 +523,4 @@ object SqlGrammar : Grammar<SqlAst>() {
     }
 
     override val rootParser by (insert or joinSelect or select or update or delete) * -optional(semicol)
-}
-
-fun main() {
-    val texts = listOf(
-        "UPDATE person SET [[v1]] WHERE person_id = (SELECT person_id FROM sys_user WHERE user_id = (SELECT user_id FROM doctor WHERE slmc_reg_no = '[[v2|this.slmcRegNo]]'));",
-        "UPDATE doctor SET [[v3]] WHERE slmc_reg_no = '[[v4|this.slmcRegNo]]';",
-        "UPDATE sys_user SET [[v5]] WHERE user_id = (SELECT user_id FROM doctor WHERE slmc_reg_no = '[[v6|this.slmcRegNo]]');",
-        "SELECT history_id FROM medical_history WHERE history_id = (SELECT MAX(history_id) FROM medical_history);",
-        "INSERT INTO medical_history VALUES ('his[[v7]]','[[patientID8]]','[[v9|this.slmcRegNo]]','[[v10]]','[[diagnostic11]]')",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patientID12]]';",
-        "UPDATE tmp_bill SET laboratory_fee = '[[labFee13]]' WHERE tmp_bill_id = '[[v14]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patientID15]]';",
-        "UPDATE tmp_bill SET laboratory_fee = '[[labFee16]]' WHERE tmp_bill_id = '[[v17]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE tmp_bill_id = (SELECT MAX(tmp_bill_id) FROM tmp_bill);",
-        "INSERT INTO tmp_bill([[column]]) VALUES([[column]]);",
-        "SELECT drug_allergies_and_reactions FROM patient WHERE patient_id = '[[patientID18]]';",
-        "SELECT drug_allergies_and_reactions FROM patient WHERE patient_id = '[[patientID19]]';",
-        "UPDATE patient SET drug_allergies_and_reactions = '[[v20]]' WHERE patient_id = '[[patientID21]]';",
-        "SELECT drug_id FROM drug WHERE drug_id = (SELECT MAX(drug_id) FROM drug);",
-        "INSERT INTO drug([[column]]) VALUES([[column]]);",
-        "SELECT stock_id FROM pharmacy_stock WHERE stock_id = (SELECT MAX(stock_id) FROM pharmacy_stock);",
-        "INSERT INTO pharmacy_stock([[column]]) VALUES([[column]]);",
-        "UPDATE pharmacy_stock SET remaining_quantity = remaining_quantity -[[qt22]] WHERE stock_id = '[[stkID23]]';",
-        "SELECT drug_id FROM drug WHERE drug_id = (SELECT MAX(drug_id) FROM drug);",
-        "INSERT INTO drug VALUES ('d[[v24]]','[[genName25]]',0);",
-        "SELECT brand_id FROM drug_brand_names WHERE brand_id = (SELECT MAX(brand_id) FROM drug_brand_names);",
-        "INSERT INTO drug_brand_names VALUES ('br[[v26]]','[[brandName27]]','[[genName28]]','[[type29]]','[[unit30]]','[[price31]]');",
-        "SELECT supplier_id FROM suppliers WHERE supplier_id = (SELECT MAX(supplier_id) FROM suppliers);",
-        "INSERT INTO suppliers VALUES ('sup[[v32]]','[[suppName33]]');",
-        "SELECT stock_id FROM pharmacy_stock WHERE stock_id = (SELECT MAX(stock_id) FROM pharmacy_stock);",
-        "INSERT INTO pharmacy_stock VALUES ('stk[[v34]]','[[drugID35]]','[[brandID36]]','[[stock37]]','[[stock38]]','[[manuDate39]]','[[expDate40]]','[[suppID41]]','[[date42]]');",
-        "UPDATE person SET [[v43]] WHERE person_id = (SELECT person_id FROM sys_user WHERE user_name = '[[v44|super.username]]');",
-        "UPDATE pharmacist SET [[v45]] WHERE pharmacist_id = '[[v46|this.pharmacistID]]';",
-        "UPDATE sys_user SET [[v47]] WHERE user_id = '[[v48|this.userID]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patientID49]]';",
-        "UPDATE tmp_bill SET pharmacy_fee = '[[pharmacyFee50]]' WHERE tmp_bill_id = '[[v51]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patientID52]]';",
-        "UPDATE tmp_bill SET pharmacy_fee = '[[pharmacyFee53]]' WHERE tmp_bill_id = '[[v54]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE tmp_bill_id = (SELECT MAX(tmp_bill_id) FROM tmp_bill);",
-        "INSERT INTO tmp_bill([[column]]) VALUES([[column]]);",
-        "UPDATE person SET [[v55]] WHERE person_id = (SELECT person_id FROM sys_user WHERE user_name = '[[v56|super.username]]');",
-        "UPDATE lab_assistant SET [[v57]] WHERE lab_assistant_id = '[[v58|this.labAssistantID]]';",
-        "UPDATE sys_user SET [[v59]] WHERE user_id = '[[v60|this.userID]]';",
-        "SELECT tst_ur_id FROM UrineFullReport WHERE tst_ur_id = (SELECT MAX(tst_ur_id) FROM UrineFullReport);",
-        "INSERT INTO UrineFullReport(tst_ur_id, appointment_id, appearance,sgRefractometer,ph,protein,glucose,ketoneBodies,bilirubin,urobilirubin,contrifugedDepositsphaseContrastMicroscopy,pusCells,redCells,epithelialCells,casts,cristals,date) VALUES('ur[[v61]]','[[appointment_id62]]','[[appearance63]]','[[sgRefractometer64]]','[[ph65]]','[[protein66]]','[[glucose67]]','[[ketoneBodies68]]','[[bilirubin69]]','[[urobilirubin70]]','[[contrifugedDepositsphaseContrastMicroscopy71]]','[[pusCells72]]','[[redCells73]]','[[epithelialCells74]]','[[casts75]]','[[cristals76]]',NOW())",
-        "SELECT tst_li_id FROM LipidTest WHERE tst_li_id = (SELECT MAX(tst_li_id) FROM LipidTest);",
-        "INSERT INTO LipidTest(tst_li_id , appointment_id, cholestrolHDL,cholestrolLDL,triglycerides,totalCholestrolLDLHDLratio,date) VALUE('li[[v77]]','[[appointment_id78]]','[[cholestrolHDL79]]','[[cholestrolLDL80]]','[[triglycerides81]]','[[totalCholestrolLDLHDLratio82]]',NOW())",
-        "SELECT tst_bloodG_id FROM BloodGroupingRh WHERE tst_bloodG_id = (SELECT MAX(tst_bloodG_id) FROM BloodGroupingRh);",
-        "INSERT INTO BloodGroupingRh(tst_bloodG_id, appointment_id, BloodGroup, rhesusD,date) VALUE('bg[[v83]]','[[app_id84]]','[[bloodG85]]','[[rhD86]]',NOW())",
-        "SELECT tst_CBC_id FROM completeBloodCount WHERE tst_CBC_id = (SELECT MAX(tst_CBC_id) FROM completeBloodCount);",
-        "INSERT INTO completeBloodCount(tst_CBC_id , appointment_id, totalWhiteCellCount,differentialCount,neutrophils,lymphocytes,monocytes,eosonophils,basophils,haemoglobin,redBloodCells,meanCellVolume,haematocrit,meanCellHaemoglobin, mchConcentration,redCellsDistributionWidth,plateletCount,date) VALUE('cbc[[v87]]','[[appointment_id88]]','[[totalWhiteCellCount89]]','[[differentialCount90]]','[[neutrophils91]]','[[lymphocytes92]]','[[monocytes93]]','[[eosonophils94]]','[[basophils95]]','[[haemoglobin96]]','[[redBloodCells97]]','[[meanCellVolume98]]','[[haematocrit99]]','[[meanCellHaemoglobin100]]','[[mchConcentration101]]','[[redCellsDistributionWidth102]]','[[plateletCount103]]',NOW())",
-        "SELECT tst_renal_id FROM RenalFunctionTest WHERE tst_renal_id = (SELECT MAX(tst_renal_id) FROM RenalFunctionTest);",
-        "INSERT INTO RenalFunctionTest(tst_renal_id, appointment_id, creatinine,urea,totalBilirubin,directBilirubin,sgotast,sgptalt,alkalinePhospates,date) VALUE('re[[v104]]','[[appointment_id105]]','[[creatinine106]]','[[urea107]]','[[totalBilirubin108]]','[[directBilirubin109]]','[[sgotast110]]','[[sgptalt111]]','[[alkalinePhospates112]]',NOW())",
-        "SELECT tst_SCPT_id FROM SeriumCreatinePhosphokinaseTotal WHERE tst_SCPT_id = (SELECT MAX(tst_SCPT_id) FROM SeriumCreatinePhosphokinaseTotal);",
-        "INSERT INTO SeriumCreatinePhosphokinaseTotal(tst_SCPT_id, appointment_id, cpkTotal,date) VALUE('scpt[[v113]]','[[appointment_id114]]','[[cpkTotal115]]',NOW())",
-        "SELECT tst_SCP_id FROM SeriumCreatinePhosphokinase WHERE tst_SCP_id = (SELECT MAX(tst_SCP_id) FROM SeriumCreatinePhosphokinase);",
-        "INSERT INTO SeriumCreatinePhosphokinase(tst_SCP_id, appointment_id, hiv12ELISA,date) VALUE('scp[[v116]]','[[appointment_id117]]','[[hiv12ELISA118]]',NOW())",
-        "SELECT tst_liver_id FROM LiverFunctionTest WHERE tst_liver_id = (SELECT MAX(tst_liver_id) FROM LiverFunctionTest);",
-        "INSERT INTO LiverFunctionTest(tst_liver_id, appointment_id, totalProtein,albumin,globulin,totalBilirubin,directBilirubin,sgotast,sgptalt,alkalinePhospates,date) VALUE('lv[[v119]]','[[appointment_id120]]','[[totalProtein121]]','[[albumin122]]','[[globulin123]]','[[totalBilirubin124]]','[[directBilirubin125]]','[[sgotast126]]','[[sgptalt127]]','[[alkalinePhospates128]]',NOW())",
-        "UPDATE person SET [[v129]] WHERE person_id = (SELECT person_id FROM sys_user WHERE user_id = '[[v130|this.userID]]');",
-        "UPDATE sys_user SET [[v131]] WHERE user_id = '[[v132|this.userID]]';",
-        "SELECT person_id FROM person WHERE person_id = (SELECT MAX(person_id) FROM person);",
-        "SELECT user_id FROM sys_user WHERE user_id = (SELECT MAX(user_id) FROM sys_user);",
-        "SELECT user_name FROM sys_user WHERE user_name = (SELECT MAX(user_name) FROM sys_user);",
-        "INSERT INTO person(person_id,first_name,last_name,nic,mobile) VALUES ('hms[[v133]]','[[firstName134]]','[[lastName135]]','[[nic136]]','[[mobile137]]');",
-        "SELECT person_id FROM person WHERE person_id = (SELECT MAX(person_id) FROM person);",
-        "SELECT user_id FROM sys_user WHERE user_id = (SELECT MAX(user_id) FROM sys_user);",
-        "SELECT user_name FROM sys_user WHERE user_name = (SELECT MAX(user_name) FROM sys_user);",
-        "INSERT INTO person(person_id,first_name,last_name,nic,mobile) VALUES ('hms[[v138]]','[[firstName139]]','[[lastName140]]','[[nic141]]','[[mobile142]]');",
-        "INSERT INTO sys_user(person_id,user_id,user_name,user_type,password) VALUES ('hms[[v143]]','hms[[v144]]u','user[[v145]]','[[userType146]]', '1234' );",
-        "SELECT person_id FROM person WHERE person_id = (SELECT MAX(person_id) FROM person);",
-        "SELECT user_id FROM sys_user WHERE user_id = (SELECT MAX(user_id) FROM sys_user);",
-        "SELECT user_name FROM sys_user WHERE user_name = (SELECT MAX(user_name) FROM sys_user);",
-        "INSERT INTO person(person_id,first_name,last_name,nic,mobile) VALUES ('hms[[v147]]','[[firstName148]]','[[lastName149]]','[[nic150]]','[[mobile151]]');",
-        "INSERT INTO sys_user(person_id,user_id,user_name,user_type,password) VALUES ('hms[[v152]]','hms[[v153]]u','user[[v154]]','[[userType155]]', '1234' );",
-        "UPDATE person SET user_id = 'hms[[v156]]u' WHERE person_id = 'hms[[v157]]';",
-        "SELECT person_id FROM person WHERE person_id = (SELECT MAX(person_id) FROM person);",
-        "SELECT user_id FROM sys_user WHERE user_id = (SELECT MAX(user_id) FROM sys_user);",
-        "SELECT user_name FROM sys_user WHERE user_name = (SELECT MAX(user_name) FROM sys_user);",
-        "INSERT INTO person(person_id,first_name,last_name,nic,mobile) VALUES ('hms[[v158]]','[[firstName159]]','[[lastName160]]','[[nic161]]','[[mobile162]]');",
-        "INSERT INTO sys_user(person_id,user_id,user_name,user_type,password) VALUES ('hms[[v163]]','hms[[v164]]u','user[[v165]]','[[userType166]]', '1234' );",
-        "UPDATE person SET user_id = 'hms[[v167]]u' WHERE person_id = 'hms[[v168]]';",
-        "INSERT INTO doctor(slmc_reg_no,user_id) VALUES ('[[slmcReg169]]','hms[[v170]]u');",
-        "UPDATE sys_user SET suspend = 1 WHERE user_id = '[[userid171]]';",
-        "UPDATE sys_user SET suspend = 0 WHERE user_id = '[[userid172]]';",
-        "UPDATE sys_user SET password='123456' WHERE user_id = '[[userid173]]';",
-        "UPDATE sys_user SET online=1,login=NOW() WHERE user_name ='[[username174]]';",
-        "UPDATE sys_user SET online=0,logout=NOW() WHERE user_name ='[[username175]]';",
-        "SELECT message_id FROM user_message WHERE message_id = (SELECT MAX(message_id) FROM user_message);",
-        "INSERT INTO user_message (message_id,reciver,sender,subject,message,date) VALUES ('msg[[v176]]','[[receiver177]]','[[sender178]]','[[subject179]]','[[message180]]','[[v181]]');",
-        "DELETE FROM user_message WHERE message_id ='[[msgID182]]';",
-        "UPDATE sys_user SET profile_pic = '[[name183]]'WHERE sys_user.user_name = '[[v184|this.username]]';",
-        "UPDATE user_message SET rd = '1'WHERE user_message.message_id = '[[msgID185]]';",
-        "UPDATE person SET [[v186]] WHERE person_id = (SELECT person_id FROM sys_user WHERE user_id = '[[v187|this.userID]]');",
-        "UPDATE sys_user SET [[v188]] WHERE user_id = '[[v189|this.userID]]';",
-        "SELECT patient_id FROM patient WHERE patient_id = (SELECT MAX(patient_id) FROM patient);",
-        "SELECT person_id FROM person WHERE person_id = (SELECT MAX(person_id) FROM person);",
-        "INSERT INTO person([[column]]) VALUES([[column]]);",
-        "SELECT patient_id FROM patient WHERE patient_id = (SELECT MAX(patient_id) FROM patient);",
-        "SELECT person_id FROM person WHERE person_id = (SELECT MAX(person_id) FROM person);",
-        "INSERT INTO person([[column]]) VALUES([[column]]);",
-        "INSERT INTO patient([[column]]) VALUES([[column]]);",
-        "UPDATE person SET [[info190]] WHERE person_id = (SELECT person_id FROM patient WHERE patient_id = '[[patientID191]]');",
-        "SELECT appointment_id FROM appointment WHERE appointment_id = (SELECT MAX(appointment_id) FROM appointment);",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID192]]';",
-        "UPDATE tmp_bill SET appointment_fee = ' 500 ' WHERE tmp_bill_id = '[[v193]]';",
-        "SELECT appointment_id FROM appointment WHERE appointment_id = (SELECT MAX(appointment_id) FROM appointment);",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID194]]';",
-        "UPDATE tmp_bill SET appointment_fee = ' 500 ' WHERE tmp_bill_id = '[[v195]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE tmp_bill_id = (SELECT MAX(tmp_bill_id) FROM tmp_bill);",
-        "INSERT INTO tmp_bill([[column]]) VALUES([[column]]);",
-        "SELECT appointment_id FROM appointment WHERE appointment_id = (SELECT MAX(appointment_id) FROM appointment);",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID196]]';",
-        "UPDATE tmp_bill SET appointment_fee = ' 500 ' WHERE tmp_bill_id = '[[v197]]';",
-        "INSERT INTO appointment (appointment_id,patient_id,slmc_reg_no,date,cancelled) VALUES ('app[[v198]]' , '[[patienID199]]' , '[[doctorID200]]' , '[[v201]] [[v202]]:00' , false );",
-        "SELECT appointment_id FROM appointment WHERE appointment_id = (SELECT MAX(appointment_id) FROM appointment);",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID203]]';",
-        "UPDATE tmp_bill SET appointment_fee = ' 500 ' WHERE tmp_bill_id = '[[v204]]';",
-        "INSERT INTO appointment (appointment_id,patient_id,slmc_reg_no,date,cancelled) VALUES ('app[[v205]]' , '[[patienID206]]' , '[[doctorID207]]' , '[[v208]] [[v209]]:00' , false );",
-        "UPDATE doctor_availability SET next_week_appointments = next_week_appointments + 1 WHERE time_slot = '[[timeSlot210]]' AND slmc_reg_no = '[[doctorID211]]' AND day = '[[v212]]';",
-        "SELECT lab_appointment_id FROM lab_appointment WHERE lab_appointment_id = (SELECT MAX(lab_appointment_id) FROM lab_appointment);",
-        "SELECT test_fee FROM lab_test WHERE test_id = '[[testID213]]';",
-        "SELECT lab_appointment_id FROM lab_appointment WHERE lab_appointment_id = (SELECT MAX(lab_appointment_id) FROM lab_appointment);",
-        "SELECT test_fee FROM lab_test WHERE test_id = '[[testID214]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID215]]';",
-        "UPDATE tmp_bill SET laboratory_fee = ' [[v216]] ' WHERE tmp_bill_id = '[[v217]]';",
-        "SELECT lab_appointment_id FROM lab_appointment WHERE lab_appointment_id = (SELECT MAX(lab_appointment_id) FROM lab_appointment);",
-        "SELECT test_fee FROM lab_test WHERE test_id = '[[testID218]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID219]]';",
-        "UPDATE tmp_bill SET laboratory_fee = ' [[v220]] ' WHERE tmp_bill_id = '[[v221]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE tmp_bill_id = (SELECT MAX(tmp_bill_id) FROM tmp_bill);",
-        "INSERT INTO tmp_bill([[column]]) VALUES([[column]]);",
-        "SELECT lab_appointment_id FROM lab_appointment WHERE lab_appointment_id = (SELECT MAX(lab_appointment_id) FROM lab_appointment);",
-        "SELECT test_fee FROM lab_test WHERE test_id = '[[testID222]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID223]]';",
-        "UPDATE tmp_bill SET laboratory_fee = ' [[v224]] ' WHERE tmp_bill_id = '[[v225]]';",
-        "INSERT INTO lab_appointment (lab_appointment_id,test_id,patient_id,doctor_id,date,cancelled) VALUES ('lapp[[v226]]' , '[[testID227]]' , '[[patienID228]]' , '[[doctorID229]]' , '[[v230]] [[v231]]:00' , false );",
-        "SELECT lab_appointment_id FROM lab_appointment WHERE lab_appointment_id = (SELECT MAX(lab_appointment_id) FROM lab_appointment);",
-        "SELECT test_fee FROM lab_test WHERE test_id = '[[testID232]]';",
-        "SELECT tmp_bill_id FROM tmp_bill WHERE patient_id = '[[patienID233]]';",
-        "UPDATE tmp_bill SET laboratory_fee = ' [[v234]] ' WHERE tmp_bill_id = '[[v235]]';",
-        "INSERT INTO lab_appointment (lab_appointment_id,test_id,patient_id,doctor_id,date,cancelled) VALUES ('lapp[[v236]]' , '[[testID237]]' , '[[patienID238]]' , '[[doctorID239]]' , '[[v240]] [[v241]]:00' , false );",
-        "UPDATE lab_appointment_timetable SET current_week_appointments = current_week_appointments + 1 WHERE time_slot = '[[timeSlot242]]' AND app_test_id = '[[testID243]]' AND app_day = '[[day244]]';",
-        "UPDATE appointment SET cancelled = true WHERE appointment.appointment_id = '[[appointmentID245]]';",
-        "UPDATE appointment SET cancelled = true WHERE appointment.appointment_id = '[[appointmentID246]]';",
-        "SELECT appointment.bill_id, bill.total FROM appointment INNER JOIN bill ON appointment.bill_id = bill.bill_id WHERE appointment_id = '[[appointmentID247]]'",
-        "UPDATE appointment SET cancelled = true WHERE appointment.appointment_id = '[[appointmentID248]]';",
-        "SELECT appointment.bill_id, bill.total FROM appointment INNER JOIN bill ON appointment.bill_id = bill.bill_id WHERE appointment_id = '[[appointmentID249]]'",
-        "UPDATE bill SET refund = 1 WHERE bill_id = '[[v250]]'",
-        "SELECT refund_id FROM refund WHERE refund_id = (SELECT MAX(refund_id) FROM bill);",
-        "INSERT INTO refund([[column]]) VALUES([[column]]);",
-        "UPDATE lab_appointment SET cancelled = true WHERE lab_appointment.lab_appointment_id = '[[appointmentID251]]';",
-        "UPDATE lab_appointment SET cancelled = true WHERE lab_appointment.lab_appointment_id = '[[appointmentID252]]';",
-        "SELECT lab_appointment.bill_id, bill.total FROM lab_appointment INNER JOIN bill ON lab_appointment.bill_id = bill.bill_id WHERE lab_appointment_id = '[[appointmentID253]]'",
-        "UPDATE lab_appointment SET cancelled = true WHERE lab_appointment.lab_appointment_id = '[[appointmentID254]]';",
-        "SELECT lab_appointment.bill_id, bill.total FROM lab_appointment INNER JOIN bill ON lab_appointment.bill_id = bill.bill_id WHERE lab_appointment_id = '[[appointmentID255]]'",
-        "UPDATE bill SET refund = 1 WHERE bill_id = '[[v256]]'",
-        "SELECT bill_id FROM bill WHERE bill_id = (SELECT MAX(bill_id) FROM bill);",
-        "INSERT INTO bill([[column]]) VALUES([[column]]);",
-        "DELETE FROM tmp_bill WHERE patient_id = '[[patientID257]]';",
-        "SELECT refund_id FROM refund WHERE refund_id = (SELECT MAX(refund_id) FROM bill);",
-        "INSERT INTO refund([[column]]) VALUES([[column]]);",
-        "DELETE FROM refund WHERE refund_id = '[[id258]]'",
-        "UPDATE person SET [[v259]] WHERE person_id = (SELECT person_id FROM sys_user WHERE user_id = '[[v260|this.userID]]');",
-        "UPDATE sys_user SET [[v261]] WHERE user_id = '[[v262|this.userID]]';",
-    )
-    for (text in texts) {
-        println(text)
-        println(SqlGrammar.parseToEnd(text))
-    }
 }

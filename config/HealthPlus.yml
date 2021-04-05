@@ -35,9 +35,9 @@ analyzer:
     - HealthPlus
 
   debug:
-    build_intergraph: true
-#    only_effects:
-#      - Doctor.Doctor.updateAccountInfo(java.lang.String)
+    build_intergraph: false
+    only_effects:
+      - Doctor.Doctor.updateAccountInfo(java.lang.String)
 
   # Enable optimizations to improve commutativity?
   opt: false
