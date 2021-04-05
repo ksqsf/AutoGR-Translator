@@ -19,7 +19,7 @@ class Schema {
     }
 
     fun get(name: String): Table? {
-        return tables[name]
+        return tables[name] ?: tables["`$name`"]
     }
 
     fun getTables(): List<Table> {
@@ -67,7 +67,7 @@ class Table(val def: CreateTable) {
 
     fun get(name: String): Column? {
         for (col in columns) {
-            if (col.name.equals(name, ignoreCase = true))
+            if (col.name.equals(name, ignoreCase = true) || col.name.equals("`$name`", ignoreCase = true))
                 return col
         }
         return null
