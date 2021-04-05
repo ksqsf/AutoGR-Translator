@@ -518,13 +518,13 @@ object SqlGrammar : Grammar<SqlAst>() {
     // Statements
     private val insert by -kwInsert * -kwInto * // INSERT INTO
             tableName * optional(-lpar * (template or singleColumnList) * -rpar) * // table(col1, col2, ...)
-            -values * -lpar * (template or exprList) * -rpar map {
-        val values = if (it.t3 is SqlTemplate) {
+            -values * -lpar * optional(template or exprList) * -rpar map {
+        val values = if (it.t3 == null || it.t3 is SqlTemplate) {
             null
         } else {
             it.t3 as List<SqlExpr>
         }
-        val columns = if (it.t2 is SqlTemplate) {
+        val columns = if (it.t2 == null || it.t2 is SqlTemplate) {
             null
         } else {
             it.t2 as List<SqlSingleColumn>?
