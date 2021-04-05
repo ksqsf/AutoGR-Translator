@@ -43,7 +43,8 @@ import java.lang.RuntimeException
 //
 // Anyway, this is a pretty ad hoc strategy, and the relevant code is only put here.
 
-fun registerHealthPlusSemantics() {
+@Suppress("unused")
+fun register() {
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.customInsertion"] = ::customInsertionSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.customSelection"] = ::customSelectionSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.addTableRow"] = ::addTableRowSemantics

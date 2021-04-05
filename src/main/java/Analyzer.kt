@@ -68,13 +68,12 @@ fun main() {
     // Basic updates
     basicUpdates += config[AnalyzerSpec.additionalBasicUpdates]
 
-    // Register additional semantics
-    // FIXME: should use reflection
+    // Register additional semantics.
+    // For each additional semantics X, call `appSemantics.XSemanticsKt.register()`.
     for (semantics in config[AnalyzerSpec.additionalSemantics]) {
-        when (semantics.toLowerCase()) {
-            "healthplus" -> appSemantics.registerHealthPlusSemantics()
-            else -> println("[WARN] unknown semantics ")
-        }
+        val semanticsClass = Class.forName("appSemantics.${semantics}SemanticsKt")
+        val register = semanticsClass.getMethod("register")
+        register(null)
     }
 
     // Start the analyzer
