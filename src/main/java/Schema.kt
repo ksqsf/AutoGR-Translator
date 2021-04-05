@@ -18,7 +18,7 @@ class Schema {
         tables[table.name] = table
     }
 
-    fun get(name: String): Table? {
+    operator fun get(name: String): Table? {
         return tables[name.removeSurrounding("`")]
     }
 
