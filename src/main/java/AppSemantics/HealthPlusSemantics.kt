@@ -6,7 +6,9 @@ import Column
 import com.github.javaparser.ast.expr.Expression
 import knownSemantics
 import Interpreter
+import Schema
 import Table
+import Type
 import java.lang.IllegalArgumentException
 import com.github.h0tk3y.betterParse.combinators.*
 import com.github.h0tk3y.betterParse.grammar.Grammar
@@ -82,16 +84,37 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
  * A template is a string containing `[[JavaExpr]]`, which indicates the evaluation result should be inserted here.
  * `'[[Expr]]'` indicates the result should be cast to [String].
  *
+ * If a template is naked, then the template can stand for values of any type. A contextual type determines what type it
+ * should be. E.g., a context like `[[x]]-10` implies x must be an integer.
+ *
  * If the expression is unable to be evaluated, it's considered `Unknown` and an argument will be added for it.
  *
  * E.g., `SELECT person_id FROM doctor WHERE slmc_reg_no = [[this.slmcRegNo]]` relies on a local state, so it's considered `Unknown`.
  * It will be translated as `doctor[slmc_reg_no=arg].person_id`.
+ *
+ * @param template
+ * @param interpreter
+ * @param contextualType the type expected by the context
  */
 fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type): AbstractValue {
     // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
-    if (template.startsWith("'"))
-        return AbstractValue.Data(null, null, template)
-    TODO("evalTemplate")
+    return if (template.startsWith("'")) {
+        val format = template.removeSurrounding("'").removePrefix("[[").removeSuffix("]]")
+        val sep = format.indexOf("|")
+        if (sep < 0) {
+            // No separator.
+            interpreter.lookup(format)?.get() ?: interpreter.freshArg("first", contextualType)
+        } else {
+            // Has separator, ident|expr.
+            val exprStr = format.substring(sep+1)
+            interpreter.lookup(exprStr)?.get() ?: interpreter.freshArg(exprStr, contextualType)
+        }
+    } else {
+        val format = template.removePrefix("[[").removeSuffix("]]")
+        // Assume format is a NameExpr that refers to a local variable.
+        // If it's `this.field` or `x[...]`, the lookup automatically fails.
+        interpreter.lookup(format)?.get() ?: interpreter.freshArg("third", contextualType)
+    }
 }
 
 fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter): AbstractValue {
