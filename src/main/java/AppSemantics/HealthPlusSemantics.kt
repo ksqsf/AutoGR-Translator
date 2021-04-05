@@ -88,7 +88,15 @@ fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: Abstr
  * it's quite hard to extract anything meaningful from tableData, so we resort to a conservative strategy.
  */
 fun addTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
-    return AbstractValue.Unknown(self, self.calculateResolvedType())
+    val table = env.schema[(args[0] as AbstractValue.Data).data as String]!!
+    val assns = mutableMapOf<Column, AbstractValue>()
+    for (column in table.columns) {
+        assns[column] = env.freshArg("addTableRow", column.type)
+    }
+    val insert = Atom.Insert(table, assns)
+    env.effect.addAtom(insert)
+    // Always assume the insertion is successful.
+    return AbstractValue.Data(null, null, true)
 }
 
 /**
@@ -97,6 +105,11 @@ fun addTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractV
  * This is equivalent to `DELETE FROM [[table]] WHERE [[columnName]] = [[fieldValue]]`.
  */
 fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    val table = env.schema[(args[0] as AbstractValue.Data).data as String]!!
+    val column = table[(args[1] as AbstractValue.Data).data as String]!!
+    val value = args[2]
+    val delete = Atom.Delete(table, mapOf(column to value))
+    env.effect.addAtom(delete)
     return AbstractValue.Unknown(self, self.calculateResolvedType())
 }
 
