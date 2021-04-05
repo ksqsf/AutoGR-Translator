@@ -38,6 +38,8 @@ analyzer:
     build_intergraph: false
     only_effects:
       - Doctor.Doctor.updateAccountInfo(java.lang.String)
+      - Doctor.Doctor.updateProfileInfo(java.lang.String)
+      - Doctor.Doctor.updateDoctorInfo(java.lang.String)
 
   # Enable optimizations to improve commutativity?
   opt: false
