@@ -354,15 +354,21 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         }
     }
 
+    /**
+     * A [DbState] represent a single column from a SELECT query.
+     *
+     * SELECT a, b, c FROM table WHERE ... is equivalent to (DbState(table.a), DbState(table.b), DbState(table.c)).
+     */
     data class DbState(
         val e: Expression?,
         val t: ResolvedType?,
         val query: ResultSet?,
         val column: Column,
-        val aggregateKind: AggregateKind
+        val aggregateKind: AggregateKind,
+        val locators: Map<Column, AbstractValue>? = null,
     ): AbstractValue(e, t) {
         override fun toString(): String {
-            return "(db ${column.table.name}.${column.name})"
+            return "(db ${column.table.name}.${column.name} $locators)"
         }
 
 //        override fun toRigi(): String {
@@ -376,7 +382,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
             assert(query.tables.size == 1)
             val table = column.table
-            val locators = whereToLocators(query.stmt, table, query.select.where)
+            // FIXME: remove query argument.
+            val locators = locators ?: whereToLocators(query.stmt, table, query.select.where)
             val locatorStr = locatorsToRigi(locators)
             return "state['TABLE_${table.name}'].get($locatorStr, '${column.name}')"
         }
