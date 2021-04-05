@@ -134,19 +134,13 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
     return if (template.startsWith("'")) {
         val format = template.removeSurrounding("'").removePrefix("[[").removeSuffix("]]")
         val sep = format.indexOf("|")
-        if (sep < 0) {
-            // No separator.
-            interpreter.lookup(format)?.get() ?: interpreter.freshArg("first", contextualType)
-        } else {
-            // Has separator, ident|expr.
-            val exprStr = format.substring(sep+1)
-            interpreter.lookup(exprStr)?.get() ?: interpreter.freshArg(exprStr, contextualType)
-        }
+        val exprStr = format.substring(sep + 1) // If no sep, sep = -1.
+        interpreter.lookup(exprStr)?.get() ?: interpreter.freshArg(exprStr, contextualType)
     } else {
         val format = template.removePrefix("[[").removeSuffix("]]")
         // Assume format is a NameExpr that refers to a local variable.
         // If it's `this.field` or `x[...]`, the lookup automatically fails.
-        interpreter.lookup(format)?.get() ?: interpreter.freshArg("third", contextualType)
+        interpreter.lookup(format)?.get() ?: interpreter.freshArg("unknown", contextualType)
     }
 }
 
@@ -313,12 +307,10 @@ fun approximateSQL(av: AbstractValue): String {
             return "[[v$cnt]]"
         }
         is AbstractValue.Free -> {
-            cnt += 1
-            return "[[${av.e}$cnt]]"
+            return "[[${av.name}]]"
         }
         is AbstractValue.Null -> {
-            cnt += 1
-            return "[[${av.e}$cnt]]"
+            return "[[${av.e}]]"
         }
         else -> {
             throw IllegalArgumentException("Unknown $av")
