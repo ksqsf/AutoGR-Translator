@@ -48,7 +48,11 @@ fun registerHealthPlusSemantics() {
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.deleteTableRow"] = ::deleteTableRowSemantics
 }
 
-// NOTE: Some UPDATE queries are actually handled by customInsertion.
+/**
+ * Prototype: `boolean customInsertion(String sql)`. Returns `true` when update is successful.
+ *
+ * This function actually used for all kinds of updates, not only insertion.
+ */
 fun customInsertionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val approxSql = approximateSQL(args[0])
     println("Insertion Approx = $approxSql")
@@ -59,9 +63,13 @@ fun customInsertionSemantics(self: Expression, env: Interpreter, receiver: Abstr
         else -> throw RuntimeException("Invalid SQL AST class for customInsertion: ${sql::class} of $sql")
     }
     env.effect.addAtom(atom)
-    return AbstractValue.Unknown(self, self.calculateResolvedType())
+    // Always assume the update is successful.
+    return AbstractValue.Data(null, null, true)
 }
 
+/**
+ * Prototype: `ArrayList<ArrayList<String>> customSelection(String sql)`.
+ */
 fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val approxSql = approximateSQL(args[0])
     println("Selection Approx = $approxSql")
@@ -72,10 +80,22 @@ fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: Abstr
     }
 }
 
+/**
+ * Prototype: `boolean DatabaseOperator.addTableRow(String table, String tableData)`. Returns `true` when the new record
+ * inserted successfully.
+ *
+ * This operator simply inserts a new record into the specified table. All we can know is that a new record is inserted,
+ * it's quite hard to extract anything meaningful from tableData, so we resort to a conservative strategy.
+ */
 fun addTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     return AbstractValue.Unknown(self, self.calculateResolvedType())
 }
 
+/**
+ * Prototype: `void DatabaseOperator.deleteTableRow(String table, String columnName, String fieldValue)`.
+ *
+ * This is equivalent to `DELETE FROM [[table]] WHERE [[columnName]] = [[fieldValue]]`.
+ */
 fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     return AbstractValue.Unknown(self, self.calculateResolvedType())
 }
@@ -168,12 +188,12 @@ fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
 }
 
 /**
- * Convert a [SqlUpdate] object into an [Atom] object. Nested SELECTs are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
+ * Convert a [SqlUpdate] object into an [Atom] object. Nested `SELECT`s are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
 fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
-    val table = interpreter.schema.get(update.table.name)!!
+    val table = interpreter.schema[update.table.name]!!
     val locators = convertLocators(update.locators, table, interpreter)
     val values = mutableMapOf<Column, AbstractValue?>()
     if (update.columns == null) {
@@ -191,7 +211,7 @@ fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
 }
 
 /**
- * Convert a [SqlDelete] object into an [Atom] object. Nested SELECTs are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
+ * Convert a [SqlDelete] object into an [Atom] object. Nested `SELECT`s are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
