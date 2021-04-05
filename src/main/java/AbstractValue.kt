@@ -43,29 +43,29 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     open fun sub(expr: Expression?, rhs: AbstractValue): AbstractValue {
         return Binary(expr, expr?.calculateResolvedType(), Operator.SUB, this, rhs)
     }
-    open fun mul(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.MUL, this, rhs)
+    open fun mul(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.MUL, this, rhs)
     }
-    open fun div(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.DIV, this, rhs)
+    open fun div(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.DIV, this, rhs)
     }
-    open fun eq(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.EQ, this, rhs)
+    open fun eq(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.EQ, this, rhs)
     }
-    open fun ne(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.NE, this, rhs)
+    open fun ne(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.NE, this, rhs)
     }
-    open fun ge(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.GE, this, rhs)
+    open fun ge(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.GE, this, rhs)
     }
-    open fun gt(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.GT, this, rhs)
+    open fun gt(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.GT, this, rhs)
     }
-    open fun le(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.LE, this, rhs)
+    open fun le(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.LE, this, rhs)
     }
-    open fun lt(expr: Expression, rhs: AbstractValue): AbstractValue {
-        return Binary(expr, expr.calculateResolvedType(), Operator.LT, this, rhs)
+    open fun lt(expr: Expression?, rhs: AbstractValue): AbstractValue {
+        return Binary(expr, expr?.calculateResolvedType(), Operator.LT, this, rhs)
     }
 
 
@@ -87,14 +87,14 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         override fun or(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
         override fun add(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
         override fun sub(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
-        override fun mul(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
-        override fun div(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
-        override fun eq(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
-        override fun ne(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
-        override fun ge(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
-        override fun gt(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
-        override fun le(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
-        override fun lt(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
+        override fun mul(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
+        override fun div(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
+        override fun eq(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
+        override fun ne(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
+        override fun ge(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
+        override fun gt(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
+        override fun le(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
+        override fun lt(expr: Expression?, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr?.calculateResolvedType()) }
     }
 
     data class Null(
@@ -138,13 +138,13 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             println("[WARN] NullPointerException!")
             return Unknown(expr, expr?.calculateResolvedType())
         }
-        override fun mul(expr: Expression, rhs: AbstractValue): AbstractValue {
+        override fun mul(expr: Expression?, rhs: AbstractValue): AbstractValue {
             println("[WARN] NullPointerException!")
-            return Unknown(expr, expr.calculateResolvedType())
+            return Unknown(expr, expr?.calculateResolvedType())
         }
-        override fun div(expr: Expression, rhs: AbstractValue): AbstractValue {
+        override fun div(expr: Expression?, rhs: AbstractValue): AbstractValue {
             println("[WARN] NullPointerException!")
-            return Unknown(expr, expr.calculateResolvedType())
+            return Unknown(expr, expr?.calculateResolvedType())
         }
 
         override fun toRigi(): String {
@@ -230,29 +230,29 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             }
         }
 
-        override fun mul(expr: Expression, rhs: AbstractValue): AbstractValue {
+        override fun mul(expr: Expression?, rhs: AbstractValue): AbstractValue {
             return if (data is Long && rhs is Data && rhs.data is Long) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else if (data is Double && rhs is Data && rhs.data is Double) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else if (data is Double && rhs is Data && rhs.data is Long) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else if (data is Long && rhs is Data && rhs.data is Double) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else {
                 super.mul(expr, rhs)
             }
         }
 
-        override fun div(expr: Expression, rhs: AbstractValue): AbstractValue {
+        override fun div(expr: Expression?, rhs: AbstractValue): AbstractValue {
             return if (data is Long && rhs is Data && rhs.data is Long) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else if (data is Double && rhs is Data && rhs.data is Double) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else if (data is Double && rhs is Data && rhs.data is Long) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else if (data is Long && rhs is Data && rhs.data is Double) {
-                Data(expr, expr.calculateResolvedType(), data + rhs.data)
+                Data(expr, expr?.calculateResolvedType(), data + rhs.data)
             } else {
                 super.div(expr, rhs)
             }
