@@ -72,7 +72,7 @@ fun main() {
     // FIXME: should use reflection
     for (semantics in config[AnalyzerSpec.additionalSemantics]) {
         when (semantics.toLowerCase()) {
-            "healthplus" -> AppSemantics.registerHealthPlusSemantics()
+            "healthplus" -> appSemantics.registerHealthPlusSemantics()
             else -> println("[WARN] unknown semantics ")
         }
     }

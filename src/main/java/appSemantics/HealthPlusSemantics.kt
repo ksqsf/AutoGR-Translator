@@ -1,4 +1,6 @@
-package AppSemantics
+@file:Suppress("KDocUnresolvedReference", "UNUSED_PARAMETER")
+
+package appSemantics
 
 import AbstractValue
 import AggregateKind
@@ -125,7 +127,7 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
  * E.g., `SELECT person_id FROM doctor WHERE slmc_reg_no = [[this.slmcRegNo]]` relies on a local state, so it's considered `Unknown`.
  * It will be translated as `doctor[slmc_reg_no=arg].person_id`.
  *
- * @param template
+ * @param template the template string, either a naked one (`[[x]]`) or a string interpolation (`prefix[[x]]suffix`)
  * @param interpreter
  * @param contextualType the type expected by the context
  */
@@ -146,13 +148,13 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
 
 fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextualType: Type): AbstractValue {
     fun singletonToDbState(select: SqlSelect, schema: Schema): AbstractValue.DbState {
-        val table = schema[select.table.name]!!
+        val selectTbl = schema[select.table.name]!!
         val locators = mutableMapOf<Column, AbstractValue>()
         for (locator in select.locators) {
-            locators[table[locator.column.name]!!] = evalSQLExpr(locator.value, table, interpreter, contextualType)
+            locators[selectTbl[locator.column.name]!!] = evalSQLExpr(locator.value, selectTbl, interpreter, contextualType)
         }
         val col = select.columns!![0] as SqlSingleColumn
-        return AbstractValue.DbState(null, null, null, table[col.name]!!, col.aggregateKind, locators)
+        return AbstractValue.DbState(null, null, null, selectTbl[col.name]!!, col.aggregateKind, locators)
     }
 
     when (expr) {
@@ -195,7 +197,7 @@ fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
 }
 
 /**
- * Convert a [SqlUpdate] object into an [Atom] object. Nested `SELECT`s are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
+ * Convert a [SqlUpdate] object into an Atom object. Nested `SELECT`s are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
@@ -223,18 +225,18 @@ fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
 }
 
 /**
- * Convert a [SqlDelete] object into an [Atom] object. Nested `SELECT`s are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
+ * Convert a [SqlDelete] object into an Atom object. Nested `SELECT`s are correctly translated to [AbstractValue.DbState] by [evalSQLExpr].
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
 fun atomizeDelete(delete: SqlDelete, interpreter: Interpreter): Atom.Delete {
-    val table = interpreter.schema.get(delete.table.name)!!
+    val table = interpreter.schema[delete.table.name]!!
     val locators = convertLocators(delete.locators, table, interpreter)
     return Atom.Delete(table, locators)
 }
 
 /**
- * Convert a [SqlInsert] object into an [Atom] object.
+ * Convert a [SqlInsert] object into an Atom object.
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
@@ -258,7 +260,7 @@ fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter): Atom.Insert {
 }
 
 /**
- * Convert a list of [SqlLocator]s into the [Effect]-style locator set.
+ * Convert a list of [SqlLocator]s into the Effect-style locator set.
  *
  * @param locators
  * @param table the default table to which the 'naked' column refers
@@ -427,7 +429,7 @@ data class SqlInterpol(val value: String): SqlExpr() {
 }
 data class SqlSingleton(val query: SqlSelect): SqlExpr() {
     override fun toString(): String {
-        return "(${query.toString()})"
+        return "($query)"
     }
 }
 data class SqlColRef(val column: SqlSingleColumn): SqlExpr() {
@@ -448,6 +450,7 @@ data class SqlBinary(val left: SqlExpr, val right: SqlExpr, val op: SqlOperator)
 
 object SqlGrammar : Grammar<SqlAst>() {
     // Lex
+    @Suppress("unused")
     private val ws by regexToken("\\s+", ignore = true)
     private val eq by literalToken("=")
     private val lpar by literalToken("(")
@@ -546,6 +549,7 @@ object SqlGrammar : Grammar<SqlAst>() {
     private val locators by separated(locator, kwAnd) use { this.terms }
 
     // Statements
+    @Suppress("UNCHECKED_CAST")
     private val insert by -kwInsert * -kwInto * // INSERT INTO
             tableName * optional(-lpar * (template or singleColumnList) * -rpar) * // table(col1, col2, ...)
             -values * -lpar * optional(template or exprList) * -rpar map {
@@ -568,6 +572,7 @@ object SqlGrammar : Grammar<SqlAst>() {
             singleColumn * -eq * singleColumn * -kwWhere * locators use {
         SqlJoinSelect(t2, t3, t4, t5, t1, t6)
     }
+    @Suppress("UNCHECKED_CAST")
     private val update by -kwUpdate * tableName * -kwSet * (template or assignmentList) * -kwWhere * locators map {
         val columns = if (it.t2 is SqlTemplate) {
             null
