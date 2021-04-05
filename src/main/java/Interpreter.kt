@@ -449,8 +449,11 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
      *
      * @param namePattern the pattern will first be normalized so that it's a valid identifier, and then suffixed with number to distinguish from other arguments
      */
-    fun freshArg(namePattern: String, type: Type = Type.String): AbstractValue.Free {
-        val ident = "fresh" + namePattern.replace(".", "_").capitalize()
+    fun freshArg(namePattern: String, type: Type): AbstractValue.Free {
+        val ident = "fresh" + namePattern.replace(".", "_")
+            .replace("[", "_").replace("]", "_")
+            .replace("(", "_").replace(")", "_")
+            .capitalize()
         val av = if (lookup(ident) != null) {
             var cnt = 1
             while (lookup("$ident$cnt") != null)
