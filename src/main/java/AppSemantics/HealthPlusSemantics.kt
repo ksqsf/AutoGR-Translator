@@ -117,10 +117,15 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
     }
 }
 
-fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter): AbstractValue {
-    fun singletonToDbState(select: SqlSelect, table: Table): AbstractValue.DbState {
+fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextualType: Type): AbstractValue {
+    fun singletonToDbState(select: SqlSelect, schema: Schema): AbstractValue.DbState {
+        val table = schema[select.table.name]!!
+        val locators = mutableMapOf<Column, AbstractValue>()
+        for (locator in select.locators) {
+            locators[table[locator.column.name]!!] = evalSQLExpr(locator.value, table, interpreter, contextualType)
+        }
         val col = select.columns!![0] as SqlSingleColumn
-        return AbstractValue.DbState(null, null, null, table[col.name]!!, col.aggregateKind)
+        return AbstractValue.DbState(null, null, null, table[col.name]!!, col.aggregateKind, locators)
     }
 
     when (expr) {
