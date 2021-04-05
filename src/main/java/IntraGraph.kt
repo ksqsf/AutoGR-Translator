@@ -1,4 +1,5 @@
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration
+import com.github.javaparser.ast.body.MethodDeclaration
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.ast.expr.SimpleName
 import com.github.javaparser.ast.stmt.ExpressionStmt
@@ -65,7 +66,7 @@ sealed class Label {
  *
  * Upon union, `return` are always merged. `except` and `break` are usually, but not always, merged.
  */
-class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
+class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: MethodDeclaration) {
 
     private fun newId(): Int {
         return IDGen.gen()
@@ -403,7 +404,7 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration) {
     }
 
     fun clone(): IntraGraph {
-        val clone = IntraGraph(this.classDef)
+        val clone = IntraGraph(classDef, methodDecl)
         val map: MutableMap<Int,Int> = mutableMapOf() // this id -> clone id
         for (id in graph.keys + rgraph.keys) {
             map[id] = newId()
