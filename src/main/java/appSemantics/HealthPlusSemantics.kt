@@ -329,9 +329,16 @@ fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter): Atom.Insert {
  * @param interpreter
  */
 fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Interpreter): Map<Column, AbstractValue> {
+    val schema = interpreter.schema
     val res = mutableMapOf<Column, AbstractValue>()
     for (locator in locators) {
-        val column = table[locator.column.name]!!
+        val columnName = locator.column.name
+        val columnTable = locator.column.table
+        val column = if (columnTable == null) {
+            table[columnName]!!
+        } else {
+            schema[columnTable.name]!![columnName]!!
+        }
         res[column] = evalSQLExpr(locator.value, table, interpreter, column.type)
     }
     return res
