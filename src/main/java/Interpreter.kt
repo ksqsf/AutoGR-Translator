@@ -11,6 +11,9 @@ import java.lang.IllegalArgumentException
  * A variable corresponds to a variable definition (statically), or the storage (dynamically).
  */
 data class Variable(var value: AbstractValue? = null) {
+    /**
+     * @exception [NullPointerException] if the variable is not assigned a value
+     */
     fun get(): AbstractValue {
         return value!!
     }
@@ -34,6 +37,13 @@ fun emptyScope(): Scope {
 class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
     var depth = 0
     var returnValue: AbstractValue? = null
+
+    /**
+     * If true, all modified variables will be made Unknown when leaving the loop.
+     */
+    var insideLoop: Boolean = false
+    private val loopSet = g.collectLoops()
+    private val modifiedInsideLoop: MutableSet<Variable> = mutableSetOf()
 
     // Current method scopes.
     val scope = mutableListOf(emptyScope())
@@ -84,7 +94,12 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
     }
 
     fun putVariable(varName: String, value: AbstractValue) {
-        lookupOrCreate(varName).set(value)
+        val variable = lookupOrCreate(varName)
+        if (insideLoop) {
+            println("[modified in loop] $varName")
+            modifiedInsideLoop.add(variable)
+        }
+        variable.set(value)
     }
 
     // null is returned when it's a variable declaration expression.
@@ -245,6 +260,14 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 val receiver = evalExpr(scope)!!
                 val args = methodCallExpr.arguments.map { evalExpr(it)!! }
                 val methodDecl = methodCallExpr.resolve()
+
+                // obj.setField() is considered to mutate obj.
+                // WARNING: This is an incomplete analysis.
+                if (scope is NameExpr && methodDecl.name.startsWith("set")) {
+                    println("[modified in loop] $scope")
+                    modifiedInsideLoop.add(lookupOrCreate(scope.nameAsString))
+                }
+
                 return if (hasSemantics(methodDecl)) {
                     dispatchSemantics(methodCallExpr, arg, receiver, args)
                 } else {
@@ -428,9 +451,33 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
 
     fun run(path: IntraPath) {
         println("[DBG] Run path ${path.final}: ${path.path}")
+        println("[RUN]" + loopSet)
 
         for (edge in path.path) {
             // println("[RUN] edge = ${edge}")
+            // Since the path is linear, we will eventually:
+            // 1. leave this loop;
+            // 2. find an effect.
+            //    a) the effect is outside the loop: the simplest case.
+            //    b) the effect is inside the loop
+            //        i. the effect is the final node of this path: ask the user to confirm it's loop-independent.
+            //           the loop is effectively unrolled once.
+            //       ii. the effect is not the final node this path: we can't analyze!
+            // This logic is strongly coupled with `collectEffectPaths`.
+            val nextId = edge.next
+            val insideLoopNext = loopSet.isPartOfLoop(nextId)
+            if (insideLoopNext == true) {
+                println("[run] entering loop at base $nextId ${g.idNode[edge.next]}")
+            }
+            if (insideLoop && !insideLoopNext) {
+                println("[run] leaving loop")
+                // Leaving the loop.
+                for (variable in modifiedInsideLoop) {
+                    variable.set(AbstractValue.Unknown(null, null))
+                }
+            }
+            insideLoop = insideLoopNext
+
             if (g.idNode[edge.next] != null) {
                 evalNode(g.idNode[edge.next]!!)
             }

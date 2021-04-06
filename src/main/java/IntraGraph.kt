@@ -434,11 +434,31 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
         return clone
     }
 
+    /**
+     * This function finds all linear paths leading to an effect.
+     *
+     * Consider a loop,
+     * ```
+     * a -(c1)-> b -> c -> a
+     *   -(!c1)> d -> effect
+     * ```
+     * A linear path is `a` -> d -> effect`. All loop body is ignored and the handling is delayed until we run the path.
+     * Therefore, one path can correspond to more than one [Effect]. If a is a loop base, two effects will be generated:
+     * 1. `a -(!c1)> d -> effect`, when the initial state is `!c1`.
+     * 2. `a -(c1)-> ... -> d -> effect`, when the initial state is `c1`.
+     * When leaving the loop, all variables modified by the loop will be assigned Unknown.
+     *
+     * A complex case arises when the effect appears INSIDE the loop:
+     * ```
+     * a -> b -> effect -> a
+     * ```
+     * In this case, the path is `a -> b -> effect`.
+     */
     fun effectPathsFromEntry(dest: Int): Set<IntraPath> {
         val res = mutableSetOf<IntraPath>()
         val vis = mutableSetOf<Int>()
+        // FIXME: generate two paths forking at loop base
         fun dfs(cur: Int, path: MutableList<OutEdge>, effect: Boolean) {
-            // FIXME: cycle, this conflicts with branch
             if (vis.contains(cur))
                 return
             vis.add(cur)
@@ -461,6 +481,9 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
         return res.toSet()
     }
 
+    /**
+     * For details on loop handling, see [effectPathsFromEntry].
+     */
     fun collectEffectPaths(): Map<Int, Set<IntraPath>> {
         val paths = mutableMapOf<Int, MutableSet<IntraPath>>()
         // From each committing node, traverse up to the entry.
@@ -596,5 +619,18 @@ data class LoopSet(val loops: Set<LoopInfo>) {
 
     fun nested(loop: LoopInfo): Boolean {
         return nested(loop.base)
+    }
+
+    private val nodesInsideLoop: Set<Int> by lazy {
+        val res = mutableSetOf<Int>()
+        for (loop in loops) {
+            res.add(loop.base)
+            res += loop.body
+        }
+        res
+    }
+
+    fun isPartOfLoop(id: Int): Boolean {
+        return nodesInsideLoop.contains(id)
     }
 }
