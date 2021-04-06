@@ -49,6 +49,7 @@ fun register() {
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.customSelection"] = ::customSelectionSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.addTableRow"] = ::addTableRowSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.deleteTableRow"] = ::deleteTableRowSemantics
+    knownSemantics["java.util.ArrayList.get"] = ::arrayListGetSemantics
 }
 
 /**
@@ -70,17 +71,67 @@ fun customInsertionSemantics(self: Expression, env: Interpreter, receiver: Abstr
     return AbstractValue.Data(null, null, true)
 }
 
+fun convertColumns(sqlCols: List<SqlColumn>, defaultTable: Table, schema: Schema, interpreter: Interpreter): List<Pair<Column, AggregateKind>> {
+    val res = mutableListOf<Pair<Column, AggregateKind>>()
+    for (sqlCol in sqlCols) {
+        when (sqlCol) {
+            is SqlAllColumn -> {
+                // Currently, we don't support `table.*`, and * always refers to defaultTable.
+                res += defaultTable.columns.map { Pair(it, AggregateKind.ID) }
+            }
+            is SqlSingleColumn -> {
+                val table = if (sqlCol.table == null) {
+                    defaultTable
+                } else {
+                    schema[sqlCol.table.name]!!
+                }
+                res.add(Pair(table[sqlCol.name]!!, sqlCol.aggregateKind))
+            }
+        }
+    }
+    return res
+}
+
+fun evalSqlSelect(sql: SqlSelect, interpreter: Interpreter): AbstractValue {
+    val schema = interpreter.schema
+    val defaultTable = schema[sql.table.name]!!
+    val locators = convertLocators(sql.locators, defaultTable, interpreter)
+    // If sql.columns does not exist, assume it to be *
+    val columns = convertColumns(sql.columns ?: listOf(SqlAllColumn), defaultTable, schema, interpreter)
+    // Now, for each column create a DbState.
+    return AbstractValue.DbStateList(null, null, sql, columns.map {
+        AbstractValue.DbState(null, null, null, it.first, it.second, locators)
+    })
+}
+
 /**
  * Prototype: `ArrayList<ArrayList<String>> customSelection(String sql)`.
  */
 fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val approxSql = approximateSQL(args[0])
     println("Selection Approx = $approxSql")
-    return when (val sql = SqlGrammar.parseToEnd(approxSql)) {
-        is SqlSelect -> TODO()
+    val res = when (val sql = SqlGrammar.parseToEnd(approxSql)) {
+        is SqlSelect -> evalSqlSelect(sql, env)
         is SqlJoinSelect -> TODO()
         else -> throw RuntimeException("Invalid SQL AST class for customSelection: ${sql::class} of $sql")
     }
+    println("customSelection: $res")
+    return res
+}
+
+fun arrayListGetSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    if (receiver == null || receiver !is AbstractValue.DbStateList) {
+        return AbstractValue.Unknown(self, self.calculateResolvedType())
+    }
+
+    // customSelection(sql).get(i) -> the i-th record in the resultset
+    if (!receiver.knownExisting) {
+        return AbstractValue.DbStateList(receiver.e, receiver.t, receiver.query, receiver.result, true)
+    }
+
+    // customSelection(sql).get(i).get(0) -> the first column
+    val idx = (args[0] as AbstractValue.Data).data as Long
+    return receiver.result[idx.toInt()]
 }
 
 /**
@@ -147,6 +198,13 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
     }
 }
 
+/**
+ * Evaluate a [SqlExpr] into an [AbstractValue].
+ *
+ * @param table the default table referred to by a naked column name
+ * @param interpreter used for evaluating a template, see [evalTemplate]
+ * @param contextualType used for determining the type of a template, see [evalTemplate]
+ */
 fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextualType: Type): AbstractValue {
     fun singletonToDbState(select: SqlSelect, schema: Schema): AbstractValue.DbState {
         val selectTbl = schema[select.table.name]!!
@@ -189,6 +247,9 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
     }
 }
 
+/**
+ * Evaluate a [SqlFunc].
+ */
 fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
     if (funcName.equals("now", ignoreCase = true)) {
         return AbstractValue.Free(null, null, "now")

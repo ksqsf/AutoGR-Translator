@@ -389,6 +389,22 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         }
     }
 
+    data class DbStateList(
+        val e: Expression?,
+        val t: ResolvedType?,
+        val query: Any,
+        val result: List<DbState>,
+        val knownExisting: Boolean = false, // If true, the DbStateList has been checked to contain a row.
+    ): AbstractValue(e, t) {
+        override fun toString(): String {
+            return if (knownExisting) {
+                "(resultset! $query)"
+            } else {
+                "(resultset $query)"
+            }
+        }
+    }
+
     data class DbNotNil(
         val e: Expression,
         val t: ResolvedType,
