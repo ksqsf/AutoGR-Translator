@@ -537,6 +537,7 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
             outstanding.removeLast()
         }
         DFS2(exitId)
+        DFS2(returnId)
 
         // Convert SCC into a loop info
         fun loopBaseOf(scc: Set<Int>): Int {
