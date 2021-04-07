@@ -19,6 +19,7 @@ import com.github.h0tk3y.betterParse.grammar.parser
 import com.github.h0tk3y.betterParse.lexer.literalToken
 import com.github.h0tk3y.betterParse.lexer.regexToken
 import com.github.h0tk3y.betterParse.parser.Parser
+import java.lang.NullPointerException
 import java.lang.RuntimeException
 
 // This file deals with the original HealthPlus code, not the synthetic one.
@@ -112,7 +113,10 @@ fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: Abstr
     println("Selection Approx = $approxSql")
     val res = when (val sql = SqlGrammar.parseToEnd(approxSql.template)) {
         is SqlSelect -> evalSqlSelect(sql, env, approxSql.values)
-        is SqlJoinSelect -> TODO()
+        is SqlJoinSelect -> {
+            // TODO: implement precise JOIN analysis
+            AbstractValue.Unknown(null, null)
+        }
         else -> throw RuntimeException("Invalid SQL AST class for customSelection: ${sql::class} of $sql")
     }
     println("customSelection: $res")
@@ -218,7 +222,13 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
             locators[selectTbl[locator.column.name]!!] = evalSQLExpr(locator.value, selectTbl, interpreter, contextualType, tvalues)
         }
         val col = select.columns!![0] as SqlSingleColumn
-        return AbstractValue.DbState(null, null, null, selectTbl[col.name]!!, col.aggregateKind, locators)
+        // Workaround some bugs in the original code.
+        try {
+            return AbstractValue.DbState(null, null, null, selectTbl[col.name]!!, col.aggregateKind, locators)
+        } catch (e: NullPointerException) {
+            println("[ERR] select table doesn't have ${col.name}, this is likely to be a bug in the original project; expr=$expr")
+            return AbstractValue.DbState(null, null, null, table[col.name]!!, col.aggregateKind, locators)
+        }
     }
 
     when (expr) {

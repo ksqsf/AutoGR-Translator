@@ -35,27 +35,8 @@ analyzer:
     - HealthPlus
 
   debug:
-    build_intergraph: false
-    only_effects:
-#      - Doctor.Doctor.updateAccountInfo(java.lang.String)
-#      - Doctor.Doctor.updateProfileInfo(java.lang.String)
-#      - Doctor.Doctor.updateDoctorInfo(java.lang.String)
-#      - Pharmacist.Pharmacist.updateProfileInfo(java.lang.String)
-#      - Pharmacist.Pharmacist.updatePharmacistInfo(java.lang.String)
-#      - Pharmacist.Pharmacist.updateAccountInfo(java.lang.String)
-#      - Admin.Admin.suspendUser(java.lang.String)
-#      - Admin.Admin.unsuspendUser(java.lang.String)
-      - LabAssistant.LabAssistant.updateProfileInfo(java.lang.String)
-      - LabAssistant.LabAssistant.updateLabAssistantInfo(java.lang.String)
-      - LabAssistant.LabAssistant.updateAccountInfo(java.lang.String)
-      - LabAssistant.LabAssistant.UrineFullReport(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
-      - LabAssistant.LabAssistant.LipidTest(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
-      - LabAssistant.LabAssistant.BloodGroupingTest(java.lang.String, java.lang.String, java.lang.String)
-      - LabAssistant.LabAssistant.completeBloodCount(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
-      - LabAssistant.LabAssistant.RenalFunctionTest(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
-      - LabAssistant.LabAssistant.SeriumCreatinePhosphokinaseTotal(java.lang.String, java.lang.String)
-      - LabAssistant.LabAssistant.SeriumCreatinePhosphokinase(java.lang.String, java.lang.String)
-      - LabAssistant.LabAssistant.liverFunctionTest(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
+    build_intergraph: true
+    only_effects: []
 
   # Enable optimizations to improve commutativity?
   opt: false
