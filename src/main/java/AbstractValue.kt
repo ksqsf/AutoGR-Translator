@@ -75,7 +75,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
     data class Unknown(
         val e: Expression?,
-        val t: ResolvedType?
+        val t: ResolvedType?,
+        val tag: Any? = null,
     ): AbstractValue(e, t){
         override fun toString(): String {
             return "(unknown from $expr)"
