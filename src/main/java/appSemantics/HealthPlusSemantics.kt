@@ -635,10 +635,13 @@ object SqlGrammar : Grammar<SqlAst>() {
     private val locator by columnName * op * expr use { SqlLocator(t1, t2, t3) }
     private val locators by separated(locator, kwAnd) use { this.terms }
 
+    // Workaround for Admin.Admin.updateAccountInfo
+    private val commandEnd by optional(rpar) and semicol
+
     // Statements
     @Suppress("UNCHECKED_CAST")
     private val insert by -kwInsert * -kwInto * // INSERT INTO
-            tableName * optional(-lpar * (template or singleColumnList) * -rpar) * // table(col1, col2, ...)
+            tableName * optional(-lpar * optional(template or singleColumnList) * -rpar) * // table(col1, col2, ...)
             -values * -lpar * optional(template or exprList) * -rpar map {
         val values = if (it.t3 == null || it.t3 is SqlTemplate) {
             null
@@ -672,5 +675,5 @@ object SqlGrammar : Grammar<SqlAst>() {
         SqlDelete(it.t1, it.t2)
     }
 
-    override val rootParser by (insert or joinSelect or select or update or delete) * -optional(semicol)
+    override val rootParser by (insert or joinSelect or select or update or delete) * -optional(commandEnd)
 }
