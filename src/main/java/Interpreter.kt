@@ -6,6 +6,7 @@ import com.github.javaparser.ast.stmt.*
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
 import com.github.javaparser.ast.visitor.VoidVisitorAdapter
 import java.lang.IllegalArgumentException
+import java.lang.RuntimeException
 
 /**
  * A variable corresponds to a variable definition (statically), or the storage (dynamically).
@@ -37,13 +38,7 @@ fun emptyScope(): Scope {
 class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
     var depth = 0
     var returnValue: AbstractValue? = null
-
-    /**
-     * If true, all modified variables will be made Unknown when leaving the loop.
-     */
-    var insideLoop: Boolean = false
     private val loopSet = g.collectLoops()
-    private val modifiedInsideLoop: MutableSet<Variable> = mutableSetOf()
 
     // Current method scopes.
     val scope = mutableListOf(emptyScope())
@@ -95,10 +90,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
 
     fun putVariable(varName: String, value: AbstractValue) {
         val variable = lookupOrCreate(varName)
-        if (insideLoop) {
-            println("[modified in loop] $varName")
-            modifiedInsideLoop.add(variable)
-        }
         variable.set(value)
     }
 
@@ -261,13 +252,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 val args = methodCallExpr.arguments.map { evalExpr(it)!! }
                 val methodDecl = methodCallExpr.resolve()
 
-                // obj.setField() is considered to mutate obj.
-                // WARNING: This is an incomplete analysis.
-                if (scope is NameExpr && methodDecl.name.startsWith("set")) {
-                    println("[modified in loop] $scope")
-                    modifiedInsideLoop.add(lookupOrCreate(scope.nameAsString))
-                }
-
                 return if (hasSemantics(methodDecl)) {
                     dispatchSemantics(methodCallExpr, arg, receiver, args)
                 } else {
@@ -401,21 +385,28 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         evalStatement(node.statement)
     }
 
-    private fun evalCond(cond: Expression, not: Boolean = false) {
-        val value = evalExpr(cond)
-        when (value) {
+    /**
+     * @param addPathCond if false, the expression is evaluated but not added to the current effect's pcond. used in loop analysis.
+     */
+    private fun evalCond(cond: Expression, not: Boolean = false, addPathCond: Boolean = true) {
+        when (val value = evalExpr(cond)) {
             null -> {
                 throw IllegalArgumentException("Condition `$cond` is not a boolean expression")
             }
             is AbstractValue.DbNotNil -> {
                 if (not)
                     value.reverse()
-                println("[DB] condition: $value")
-                effect.addCondition(value)
+
+                if (addPathCond) {
+                    println("[DB] condition: $value")
+                    effect.addCondition(value)
+                }
             }
             else -> {
-                println("[COND] condition: $cond")
-                effect.addCondition(value)
+                if (addPathCond) {
+                    println("[COND] condition: $cond")
+                    effect.addCondition(value)
+                }
             }
         }
     }
@@ -449,9 +440,54 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         }, this)
     }
 
+    /**
+     * Collect variables modified by loop at base. The result set can contain variables defined inside the loop, but since
+     * they cannot be used outside the loop, it's safe.
+     *
+     * ASSUME the base node is immutable.
+     */
+    private fun variablesModifiedByLoop(base: Int): Set<Pair<Variable, String>> {
+        val body = loopSet[base]!!.body.toList()
+        val res = mutableSetOf<Pair<Variable, String>>()
+        pushScope()
+        for (id in body) {
+            val node = g.idNode[id] ?: continue
+            if (containsUpdate(node.statement) || containsCommit(node.statement)) {
+                throw RuntimeException("Can't analyze effect inside loop")
+            }
+            node.statement.accept(object : VoidVisitorAdapter<MutableSet<Pair<Variable, String>>>() {
+                override fun visit(n: MethodCallExpr, res: MutableSet<Pair<Variable, String>>) {
+                    when (val scope = n.scope) {
+                        is NameExpr -> {
+                            val method = n.resolve()
+                            if (method.name.startsWith("set")) {
+                                println("[loop] modify $scope")
+                                res.add(Pair(lookupOrCreate(scope.nameAsString), scope.nameAsString))
+                            }
+                        }
+                        else -> println("[loop] unknown scope $scope")
+                    }
+                }
+                override fun visit(n: VariableDeclarator, res: MutableSet<Pair<Variable, String>>) {
+                    lookupOrCreate(n.nameAsString)
+                }
+                override fun visit(n: AssignExpr, res: MutableSet<Pair<Variable, String>>) {
+                    when (val target = n.target) {
+                        is NameExpr -> {
+                            println("[loop] modify $target")
+                            res.add(Pair(lookupOrCreate(target.nameAsString), target.nameAsString))
+                        }
+                        else -> println("[loop] unknown target $target")
+                    }
+                }
+            }, res)
+        }
+        popScope()
+        return res
+    }
+
     fun run(path: IntraPath) {
         println("[DBG] Run path ${path.final}: ${path.path}")
-        println("[RUN]" + loopSet)
 
         for (edge in path.path) {
             // println("[RUN] edge = ${edge}")
@@ -464,19 +500,17 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             //           the loop is effectively unrolled once.
             //       ii. the effect is not the final node this path: we can't analyze!
             // This logic is strongly coupled with `collectEffectPaths`.
-            val nextId = edge.next
-            val insideLoopNext = loopSet.isPartOfLoop(nextId)
-            if (insideLoopNext == true) {
-                println("[run] entering loop at base $nextId ${g.idNode[edge.next]}")
-            }
-            if (insideLoop && !insideLoopNext) {
-                println("[run] leaving loop")
-                // Leaving the loop.
-                for (variable in modifiedInsideLoop) {
-                    variable.set(AbstractValue.Unknown(null, null))
+            val id = edge.next
+            val loopBase = loopSet.findBase(id)
+            var enterLoop = false
+            if (id == loopBase) {
+                // find a new loop.
+                println("[loop] new loop $loopBase at ${edge.label}")
+                for ((variable, name) in variablesModifiedByLoop(id)) {
+                    variable.set(AbstractValue.Unknown(null, null, tag = name))
                 }
+                enterLoop = true
             }
-            insideLoop = insideLoopNext
 
             if (g.idNode[edge.next] != null) {
                 evalNode(g.idNode[edge.next]!!)
@@ -484,10 +518,10 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             when (edge.label) {
                 is Label.T -> {}
                 is Label.Br -> {
-                    evalCond(edge.label.expr)
+                    evalCond(edge.label.expr, addPathCond = !enterLoop)
                 }
                 is Label.BrNot -> {
-                    evalCond(edge.label.expr, not = true)
+                    evalCond(edge.label.expr, not = true, addPathCond = !enterLoop)
                 }
                 else -> {
                     println("[WARN] unknown label: ${edge.label}, assuming to be true")

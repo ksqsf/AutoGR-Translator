@@ -448,6 +448,9 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
      * 2. `a -(c1)-> ... -> d -> effect`, when the initial state is `c1`.
      * When leaving the loop, all variables modified by the loop will be assigned Unknown.
      *
+     * Currently, we implement only the conservative version of this analysis, i.e. always consider the loop can happen.
+     * See [Interpreter.variablesModifiedByLoop].
+     *
      * A complex case arises when the effect appears INSIDE the loop:
      * ```
      * a -> b -> effect -> a
@@ -585,6 +588,9 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
     }
 }
 
+/**
+ * Except for loop bases, a node is only found in one [LoopInfo].
+ */
 data class LoopInfo(val base: Int, val body: Set<Int>) {
     fun contains(x: Int): Boolean {
         return base == x || containsBody(x)
@@ -632,5 +638,22 @@ data class LoopSet(val loops: Set<LoopInfo>) {
 
     fun isPartOfLoop(id: Int): Boolean {
         return nodesInsideLoop.contains(id)
+    }
+
+    fun findBase(x: Int): Int? {
+        val res = null
+        for (loop in loops) {
+            if (loop.base == x)
+                return x
+        }
+        for (loop in loops) {
+            if (loop.body.contains(x))
+                return loop.base
+        }
+        return res
+    }
+
+    operator fun get(base: Int): LoopInfo? {
+        return loops.filter { it.base == base }.getOrNull(0)
     }
 }

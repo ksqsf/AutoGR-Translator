@@ -103,6 +103,9 @@ fun main() {
             for (path in pathSet) {
                 val effect = Effect(analyzer, path)
                 effect.tryToAnalyze()
+                println(effect.pathCondition)
+                println(effect.argv)
+                println(effect.atoms)
             }
         }
     }
