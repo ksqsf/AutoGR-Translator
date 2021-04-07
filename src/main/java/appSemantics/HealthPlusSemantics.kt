@@ -186,12 +186,12 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
 fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type): AbstractValue {
     // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
     return if (template.startsWith("'")) {
-        val format = template.removeSurrounding("'").removePrefix("[[").removeSuffix("]]")
+        val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
         val sep = format.indexOf("|")
-        val exprStr = format.substring(sep + 1) // If no sep, sep = -1.
+        val exprStr = format.substring(sep + 1)
         interpreter.lookup(exprStr)?.get() ?: interpreter.freshArg(exprStr, contextualType)
     } else {
-        val format = template.removePrefix("[[").removeSuffix("]]")
+        val format = template.substringAfter("[[").substringBefore("]]")
         // Assume format is a NameExpr that refers to a local variable.
         // If it's `this.field` or `x[...]`, the lookup automatically fails.
         interpreter.lookup(format)?.get() ?: interpreter.freshArg("unknown", contextualType)
@@ -370,8 +370,12 @@ fun approximateSQL(av: AbstractValue): String {
             }
         }
         is AbstractValue.Unknown -> {
-            cnt += 1
-            return "[[v$cnt|${av.e}]]"
+            return if (av.tag != null && av.tag is String) {
+                "[[${av.tag}]]"
+            } else {
+                cnt += 1
+                "[[v$cnt|${av.e}]]"
+            }
         }
         is AbstractValue.Call -> {
             cnt += 1
