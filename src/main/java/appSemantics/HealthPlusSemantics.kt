@@ -60,10 +60,10 @@ fun register() {
 fun customInsertionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val approxSql = approximateSQL(args[0])
     println("Insertion Approx = $approxSql")
-    val atom = when (val sql = SqlGrammar.parseToEnd(approxSql)) {
-        is SqlInsert -> atomizeInsert(sql, env)
-        is SqlDelete -> atomizeDelete(sql, env)
-        is SqlUpdate -> atomizeUpdate(sql, env)
+    val atom = when (val sql = SqlGrammar.parseToEnd(approxSql.template)) {
+        is SqlInsert -> atomizeInsert(sql, env, approxSql.values)
+        is SqlDelete -> atomizeDelete(sql, env, approxSql.values)
+        is SqlUpdate -> atomizeUpdate(sql, env, approxSql.values)
         else -> throw RuntimeException("Invalid SQL AST class for customInsertion: ${sql::class} of $sql")
     }
     env.effect.addAtom(atom)
@@ -92,10 +92,10 @@ fun convertColumns(sqlCols: List<SqlColumn>, defaultTable: Table, schema: Schema
     return res
 }
 
-fun evalSqlSelect(sql: SqlSelect, interpreter: Interpreter): AbstractValue {
+fun evalSqlSelect(sql: SqlSelect, interpreter: Interpreter, tvalues: Map<Int, AbstractValue>): AbstractValue {
     val schema = interpreter.schema
     val defaultTable = schema[sql.table.name]!!
-    val locators = convertLocators(sql.locators, defaultTable, interpreter)
+    val locators = convertLocators(sql.locators, defaultTable, interpreter, tvalues)
     // If sql.columns does not exist, assume it to be *
     val columns = convertColumns(sql.columns ?: listOf(SqlAllColumn), defaultTable, schema, interpreter)
     // Now, for each column create a DbState.
@@ -110,8 +110,8 @@ fun evalSqlSelect(sql: SqlSelect, interpreter: Interpreter): AbstractValue {
 fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val approxSql = approximateSQL(args[0])
     println("Selection Approx = $approxSql")
-    val res = when (val sql = SqlGrammar.parseToEnd(approxSql)) {
-        is SqlSelect -> evalSqlSelect(sql, env)
+    val res = when (val sql = SqlGrammar.parseToEnd(approxSql.template)) {
+        is SqlSelect -> evalSqlSelect(sql, env, approxSql.values)
         is SqlJoinSelect -> TODO()
         else -> throw RuntimeException("Invalid SQL AST class for customSelection: ${sql::class} of $sql")
     }
@@ -183,7 +183,7 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
  * @param interpreter
  * @param contextualType the type expected by the context
  */
-fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type): AbstractValue {
+fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type, tvalues: Map<Int, AbstractValue>): AbstractValue {
     // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
     return if (template.startsWith("'")) {
         val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
@@ -192,9 +192,14 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
         interpreter.lookup(exprStr)?.get() ?: interpreter.freshArg(exprStr, contextualType)
     } else {
         val format = template.substringAfter("[[").substringBefore("]]")
-        // Assume format is a NameExpr that refers to a local variable.
-        // If it's `this.field` or `x[...]`, the lookup automatically fails.
-        interpreter.lookup(format)?.get() ?: interpreter.freshArg("unknown", contextualType)
+        if (format.startsWith("?")) {
+            // [[?n]] indicates this is a filled value with index n.
+            tvalues[format.substringAfter("?").toInt()]!!
+        } else {
+            // Assume format is a NameExpr that refers to a local variable.
+            // If it's `this.field` or `x[...]`, the lookup automatically fails.
+            interpreter.lookup(format)?.get() ?: interpreter.freshArg("unknown", contextualType)
+        }
     }
 }
 
@@ -205,12 +210,12 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
  * @param interpreter used for evaluating a template, see [evalTemplate]
  * @param contextualType used for determining the type of a template, see [evalTemplate]
  */
-fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextualType: Type): AbstractValue {
+fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextualType: Type, tvalues: Map<Int, AbstractValue>): AbstractValue {
     fun singletonToDbState(select: SqlSelect, schema: Schema): AbstractValue.DbState {
         val selectTbl = schema[select.table.name]!!
         val locators = mutableMapOf<Column, AbstractValue>()
         for (locator in select.locators) {
-            locators[selectTbl[locator.column.name]!!] = evalSQLExpr(locator.value, selectTbl, interpreter, contextualType)
+            locators[selectTbl[locator.column.name]!!] = evalSQLExpr(locator.value, selectTbl, interpreter, contextualType, tvalues)
         }
         val col = select.columns!![0] as SqlSingleColumn
         return AbstractValue.DbState(null, null, null, selectTbl[col.name]!!, col.aggregateKind, locators)
@@ -218,8 +223,8 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
 
     when (expr) {
         // Template-related reflection
-        is SqlInterpol -> return evalTemplate(expr.value, interpreter, contextualType)
-        is SqlTemplateValue -> return evalTemplate(expr.tag, interpreter, contextualType)
+        is SqlInterpol -> return evalTemplate(expr.value, interpreter, contextualType, tvalues)
+        is SqlTemplateValue -> return evalTemplate(expr.tag, interpreter, contextualType, tvalues)
         // Conventional SQL
         is SqlInt -> return AbstractValue.Data(null, null, expr.value)
         is SqlBool -> return AbstractValue.Data(null, null, expr.value)
@@ -229,8 +234,8 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
             return AbstractValue.DbState(null, null, null, col, expr.column.aggregateKind)
         }
         is SqlBinary -> {
-            val left = evalSQLExpr(expr.left, table, interpreter, Type.Int)
-            val right = evalSQLExpr(expr.right, table, interpreter, Type.Int)
+            val left = evalSQLExpr(expr.left, table, interpreter, Type.Int, tvalues)
+            val right = evalSQLExpr(expr.right, table, interpreter, Type.Int, tvalues)
             return when (expr.op) {
                 SqlOperator.ADD -> left.add(null, right)
                 SqlOperator.SUB -> left.sub(null, right)
@@ -263,9 +268,9 @@ fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
-fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
+fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter, tvalues: Map<Int, AbstractValue>): Atom.Update {
     val table = interpreter.schema[update.table.name]!!
-    val locators = convertLocators(update.locators, table, interpreter)
+    val locators = convertLocators(update.locators, table, interpreter, tvalues)
     val values = mutableMapOf<Column, AbstractValue?>()
     if (update.columns == null) {
         for (tableCol in table.columns) {
@@ -279,7 +284,7 @@ fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
     } else {
         for (assn in update.columns) {
             val column = table[assn.column.name]!!
-            val value = evalSQLExpr(assn.value, table, interpreter, column.type)
+            val value = evalSQLExpr(assn.value, table, interpreter, column.type, tvalues)
             values[column] = value
         }
     }
@@ -291,9 +296,9 @@ fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter): Atom.Update {
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
-fun atomizeDelete(delete: SqlDelete, interpreter: Interpreter): Atom.Delete {
+fun atomizeDelete(delete: SqlDelete, interpreter: Interpreter, tvalues: Map<Int, AbstractValue>): Atom.Delete {
     val table = interpreter.schema[delete.table.name]!!
-    val locators = convertLocators(delete.locators, table, interpreter)
+    val locators = convertLocators(delete.locators, table, interpreter, tvalues)
     return Atom.Delete(table, locators)
 }
 
@@ -302,7 +307,7 @@ fun atomizeDelete(delete: SqlDelete, interpreter: Interpreter): Atom.Delete {
  *
  * Unknown templates are translated into a list of `Free` arguments.
  */
-fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter): Atom.Insert {
+fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter, tvalues: Map<Int, AbstractValue>): Atom.Insert {
     val table = interpreter.schema[insert.table.name]!!
     val values = mutableMapOf<Column, AbstractValue>()
     if (insert.values == null) {
@@ -315,7 +320,7 @@ fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter): Atom.Insert {
         // is already handled above.
         val columns = insert.columns?.map { table[it.name]!! } ?: table.columns
         for ((column, value) in columns zip insert.values) {
-            values[column] = evalSQLExpr(value, table, interpreter, column.type)
+            values[column] = evalSQLExpr(value, table, interpreter, column.type, tvalues)
         }
     }
     return Atom.Insert(table, values)
@@ -328,7 +333,7 @@ fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter): Atom.Insert {
  * @param table the default table to which the 'naked' column refers
  * @param interpreter
  */
-fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Interpreter): Map<Column, AbstractValue> {
+fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Interpreter, tvalues: Map<Int, AbstractValue>): Map<Column, AbstractValue> {
     val schema = interpreter.schema
     val res = mutableMapOf<Column, AbstractValue>()
     for (locator in locators) {
@@ -339,17 +344,22 @@ fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Inter
         } else {
             schema[columnTable.name]!![columnName]!!
         }
-        res[column] = evalSQLExpr(locator.value, table, interpreter, column.type)
+        res[column] = evalSQLExpr(locator.value, table, interpreter, column.type, tvalues)
     }
     return res
 }
 
-var cnt = 0
+data class SqlApprox(val template: String, val values: Map<Int, AbstractValue.DbState> = emptyMap()) {
+    operator fun plus(rhs: SqlApprox): SqlApprox {
+        return SqlApprox(template + rhs.template, values + rhs.values)
+    }
+}
 
+var cnt = 0
 /**
  * Return an approximation of the SQL string building expression, for further parsing.
  */
-fun approximateSQL(av: AbstractValue): String {
+fun approximateSQL(av: AbstractValue): SqlApprox {
     when (av) {
         is AbstractValue.Binary -> {
             when (av.op) {
@@ -363,29 +373,33 @@ fun approximateSQL(av: AbstractValue): String {
         }
         is AbstractValue.Data -> {
             return when (av.data) {
-                is String -> av.data
-                is Long -> av.data.toString()
-                is Double -> av.data.toString()
+                is String -> SqlApprox(av.data)
+                is Long -> SqlApprox(av.data.toString())
+                is Double -> SqlApprox(av.data.toString())
                 else -> throw IllegalArgumentException("Unknown data type ${av.data::class}")
             }
         }
         is AbstractValue.Unknown -> {
             return if (av.tag != null && av.tag is String) {
-                "[[${av.tag}]]"
+                SqlApprox("[[${av.tag}]]")
             } else {
                 cnt += 1
-                "[[v$cnt|${av.e}]]"
+                SqlApprox("[[v$cnt|${av.e}]]")
             }
         }
         is AbstractValue.Call -> {
             cnt += 1
-            return "[[v$cnt]]"
+            return SqlApprox("[[v$cnt]]")
         }
         is AbstractValue.Free -> {
-            return "[[${av.name}]]"
+            return SqlApprox("[[${av.name}]]")
         }
         is AbstractValue.Null -> {
-            return "[[${av.e}]]"
+            return SqlApprox("[[${av.e}]]")
+        }
+        is AbstractValue.DbState -> {
+            cnt += 1
+            return SqlApprox("[[?$cnt]]", mapOf(cnt to av))
         }
         else -> {
             throw IllegalArgumentException("Unknown $av")
