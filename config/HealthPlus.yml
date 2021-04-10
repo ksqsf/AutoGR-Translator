@@ -6,9 +6,9 @@ analyzer:
   schema_files:
     - /Users/kaima/src/HealthPlus/database/hms_db.sql
 
-  # TODO: this doesn't work yet
   additional_class_paths:
-    - /Users/kaima/src/HealthPlus/target/classes
+    - /Users/kaima/src/HealthPlus/target/dependency/
+    - /Users/kaima/src/HealthPlus/target/classes/
 
   additional_basic_effects:
     - com.hms.hms_test_2.DatabaseOperator.addTableRow

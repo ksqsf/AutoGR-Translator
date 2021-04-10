@@ -23,7 +23,10 @@ import io.github.classgraph.MethodInfo
 import io.github.classgraph.ScanResult
 import java.io.File
 import java.lang.Exception
-import java.nio.file.Path
+import java.net.URL
+import java.net.URLClassLoader
+import java.nio.file.Files
+import java.nio.file.Paths
 
 typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
@@ -127,7 +130,27 @@ class Analyzer(val cfg: Config) {
     val intragraphs: IntraGraphSet
     val schema = Schema()
 
+    private val classLoader: URLClassLoader
+
     init {
+        // Create a custom ClassLoader that considers additional_class_paths
+        val urls = mutableListOf<URL>()
+        for (cp in cfg[AnalyzerSpec.additionalClassPaths]) {
+            // If a path ends with '/', it's considered a directory, and all jar files under it are added.
+            if (cp.endsWith("/")) {
+                Files.walk(Paths.get(cp), 1).forEach {
+                    if (it.fileName.toString().endsWith(".jar", ignoreCase = true)) {
+                        println("CLASSPATH: $it")
+                        urls.add(it.toUri().toURL())
+                    }
+                }
+            }
+            // ... the directory itself is nevertheless added.
+            urls.add(File(cp).toURI().toURL())
+            println("CLASSPATH: $cp")
+        }
+        classLoader = URLClassLoader.newInstance(urls.toTypedArray(), ClassLoader.getSystemClassLoader())
+
         // Load schema files
         val schemaFiles = cfg[AnalyzerSpec.schemaFiles]
         for (schema in schemaFiles) {
@@ -135,11 +158,10 @@ class Analyzer(val cfg: Config) {
         }
 
         // Parse
-        val additionalClassPaths = cfg[AnalyzerSpec.additionalClassPaths]
         val typeSolver = CombinedTypeSolver(
             MemoryTypeSolver(),
             ReflectionTypeSolver(),
-            ClassLoaderTypeSolver(ClassLoader.getSystemClassLoader())
+            ClassLoaderTypeSolver(classLoader)
         )
         val symbolSolver = JavaSymbolSolver(typeSolver)
 
@@ -147,7 +169,7 @@ class Analyzer(val cfg: Config) {
         parserCfg.setSymbolResolver(symbolSolver)
 
         val projectRoot = cfg[AnalyzerSpec.projectRoot]
-        val project = SourceRoot(Path.of(projectRoot))
+        val project = SourceRoot(Paths.get(projectRoot))
         project.parserConfiguration = parserCfg
 
         Timer.start("parse")
