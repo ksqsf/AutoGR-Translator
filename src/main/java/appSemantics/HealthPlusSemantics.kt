@@ -190,10 +190,16 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
 fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type, tvalues: Map<Int, AbstractValue>): AbstractValue {
     // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
     return if (template.startsWith("'")) {
+        if (!template.contains("[["))
+            return AbstractValue.Data(null, null, template)
         val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
-        val sep = format.indexOf("|")
-        val exprStr = format.substring(sep + 1)
-        interpreter.lookup(exprStr)?.getKnown() ?: interpreter.freshArg(exprStr, Type.String)
+        if (format.startsWith("?")) {
+            tvalues[format.substringAfter("?").toInt()]!!
+        } else {
+            val sep = format.indexOf("|")
+            val exprStr = format.substring(sep + 1)
+            interpreter.lookup(exprStr)?.getKnown() ?: interpreter.freshArg(exprStr, Type.String)
+        }
     } else {
         val format = template.substringAfter("[[").substringBefore("]]")
         if (format.startsWith("?")) {
@@ -362,7 +368,7 @@ fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Inter
     return res
 }
 
-data class SqlApprox(val template: String, val values: Map<Int, AbstractValue.DbState> = emptyMap()) {
+data class SqlApprox(val template: String, val values: Map<Int, AbstractValue> = emptyMap()) {
     operator fun plus(rhs: SqlApprox): SqlApprox {
         return SqlApprox(template + rhs.template, values + rhs.values)
     }
@@ -411,6 +417,10 @@ fun approximateSQL(av: AbstractValue): SqlApprox {
             return SqlApprox("[[${av.e}]]")
         }
         is AbstractValue.DbState -> {
+            cnt += 1
+            return SqlApprox("[[?$cnt]]", mapOf(cnt to av))
+        }
+        is AbstractValue.Unary -> {
             cnt += 1
             return SqlApprox("[[?$cnt]]", mapOf(cnt to av))
         }
