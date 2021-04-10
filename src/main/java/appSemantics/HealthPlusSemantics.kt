@@ -193,7 +193,7 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
         val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
         val sep = format.indexOf("|")
         val exprStr = format.substring(sep + 1)
-        interpreter.lookup(exprStr)?.get() ?: interpreter.freshArg(exprStr, contextualType)
+        interpreter.lookup(exprStr)?.getKnown() ?: interpreter.freshArg(exprStr, Type.String)
     } else {
         val format = template.substringAfter("[[").substringBefore("]]")
         if (format.startsWith("?")) {
@@ -246,6 +246,9 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
         is SqlBinary -> {
             val left = evalSQLExpr(expr.left, table, interpreter, Type.Int, tvalues)
             val right = evalSQLExpr(expr.right, table, interpreter, Type.Int, tvalues)
+            if (left is AbstractValue.Unknown || right is AbstractValue.Unknown) {
+                return AbstractValue.Unknown(null, null)
+            }
             return when (expr.op) {
                 SqlOperator.ADD -> left.add(null, right)
                 SqlOperator.SUB -> left.sub(null, right)

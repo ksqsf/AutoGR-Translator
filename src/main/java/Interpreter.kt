@@ -19,6 +19,16 @@ data class Variable(var value: AbstractValue? = null) {
         return value!!
     }
 
+    /**
+     * Returns null if the value is unknown.
+     */
+    fun getKnown(): AbstractValue? {
+        return if (get().unknown())
+            null
+        else
+            get()
+    }
+
     fun set(v: AbstractValue) {
         value = v
     }

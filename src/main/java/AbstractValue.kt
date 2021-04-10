@@ -478,6 +478,7 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return receiver.unknown() || args.any { it.unknown() }
         }
         override fun toString(): String {
+            // FIXME: only receiver & args, should add method name
             return "(invoke $receiver $args)"
         }
     }

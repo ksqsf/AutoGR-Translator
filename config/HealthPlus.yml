@@ -1,4 +1,6 @@
 analyzer:
+  project_name: HealthPlus
+
   # Essential
   project_root: /Users/kaima/src/HealthPlus/src/main/java
   schema_files:
@@ -53,5 +55,5 @@ analyzer:
       output: false
 
 rigi:
-  generate: false
+  generate: true
   output_file: /tmp/output.py

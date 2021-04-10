@@ -65,6 +65,9 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
         }
     }
 
+    /**
+     * Initialize this effect by running the interpreter on the corresponding intrapath.
+     */
     fun tryToAnalyze() {
 
         // sourcePath is a known effectual path.
