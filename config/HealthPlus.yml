@@ -20,18 +20,9 @@ analyzer:
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
     - com.hms.hms_test_2.DatabaseOperator.customSelection
 
-  exclude:
-    - com.hms.hms_test_2.DatabaseOperator.createDatabase
-    - com.hms.hms_test_2.DatabaseOperator.showDatabases
-    - com.hms.hms_test_2.DatabaseOperator.useDatabase
-    - com.hms.hms_test_2.DatabaseOperator.createTable
-    - com.hms.hms_test_2.DatabaseOperator.showTables
-    - com.hms.hms_test_2.DatabaseOperator.deleteDatabase
-    - com.hms.hms_test_2.DatabaseOperator.deleteTable
-    - com.hms.hms_test_2.DatabaseOperator.addTableRow
-    - com.hms.hms_test_2.DatabaseOperator.deleteTableRow
-    - com.hms.hms_test_2.DatabaseOperator.customInsertion
-    - com.hms.hms_test_2.DatabaseOperator.customDeletion
+  exclude_prefix:
+    - com.hms.hms_test_2.DatabaseOperator
+    - com.hms.hms_test_2.User
     # The following are too slow...
     # - Receptionist.Receptionist.makeAppointment
 
@@ -44,10 +35,6 @@ analyzer:
 
   # Enable optimizations to improve commutativity?
   opt: false
-
-  exclude_classes:
-    - com.hms.hms_test_2.DatabaseOperator
-    - com.hms.hms_test_2.User
 
   graphviz:
     intergraph:

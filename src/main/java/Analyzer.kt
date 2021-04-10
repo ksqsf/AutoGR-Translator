@@ -39,7 +39,7 @@ object AnalyzerSpec : ConfigSpec() {
     val additionalBasicEffects by optional(listOf<String>())
     val additionalBasicUpdates by optional(listOf<String>())
     val additionalSemantics by optional(listOf<String>())
-    val exclude by optional(listOf<String>())
+    val excludePrefix by optional(listOf<String>())
     val opt by optional(false)
 
     object Graphviz : ConfigSpec() {
@@ -278,7 +278,7 @@ class Analyzer(val cfg: Config) {
      * @param effectMethodSig
      */
     fun excludes(effectMethodSig: String): Boolean {
-        for (excluded in cfg[AnalyzerSpec.exclude]) {
+        for (excluded in cfg[AnalyzerSpec.excludePrefix]) {
             if (effectMethodSig.startsWith(excluded))
                 return true
         }
