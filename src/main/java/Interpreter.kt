@@ -241,6 +241,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     BinaryExpr.Operator.GREATER_EQUALS -> left.ge(expr, right)
                     BinaryExpr.Operator.LESS -> left.lt(expr, right)
                     BinaryExpr.Operator.LESS_EQUALS -> left.le(expr, right)
+                    BinaryExpr.Operator.OR -> left.or(expr, right)
+                    BinaryExpr.Operator.AND -> left.and(expr, right)
                     else -> {
                         println("[WARN] binary operator ${expr.operator} unsupported")
                         AbstractValue.Unknown(expr, expr.calculateResolvedType())
