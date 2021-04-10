@@ -471,15 +471,22 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     data class Call(
         val e: Expression,
         val t: ResolvedType,
-        val receiver: AbstractValue,
+        val receiver: AbstractValue?,
         val methodName: String,
         val args: List<AbstractValue>
     ): AbstractValue(e, t) {
         override fun unknown(): Boolean {
-            return receiver.unknown() || args.any { it.unknown() }
+            // Already handled by interpreter.
+            return false
         }
         override fun toString(): String {
             return "(invoke $receiver $methodName $args)"
+        }
+
+        override fun toRigi(): String {
+            // TODO: actually implement it
+            println("[ERR] Call.toRigi: $this")
+            return "True"
         }
     }
 
