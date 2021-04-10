@@ -472,14 +472,14 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         val e: Expression,
         val t: ResolvedType,
         val receiver: AbstractValue,
+        val methodName: String,
         val args: List<AbstractValue>
     ): AbstractValue(e, t) {
         override fun unknown(): Boolean {
             return receiver.unknown() || args.any { it.unknown() }
         }
         override fun toString(): String {
-            // FIXME: only receiver & args, should add method name
-            return "(invoke $receiver $args)"
+            return "(invoke $receiver $methodName $args)"
         }
     }
 

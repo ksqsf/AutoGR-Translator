@@ -265,7 +265,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 return if (hasSemantics(methodDecl)) {
                     dispatchSemantics(methodCallExpr, arg, receiver, args)
                 } else {
-                    AbstractValue.Call(methodCallExpr, methodCallExpr.calculateResolvedType(), receiver, args)
+                    AbstractValue.Call(methodCallExpr, methodCallExpr.calculateResolvedType(), receiver, methodCallExpr.nameAsString, args)
                 }
             }
 
