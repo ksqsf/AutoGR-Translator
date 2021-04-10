@@ -549,6 +549,9 @@ enum class AggregateKind {
 }
 
 enum class Operator {
+    S2I, // String to int
+    I2S, // Int to string
+
     NEG, // -a, where a is integer
     XOR, // a^b
     ADD, // a+b
@@ -569,6 +572,8 @@ enum class Operator {
 
     override fun toString(): String {
         return when (this) {
+            S2I -> "StrToInt"
+            I2S -> "IntToStr"
             NEG -> "-"
             XOR -> "^"
             ADD -> "+"

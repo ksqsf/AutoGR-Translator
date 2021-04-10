@@ -103,6 +103,8 @@ val knownSemantics = mutableMapOf(
     "java.sql.ResultSet.getString" to ::getColumnSemantics,
     "java.sql.ResultSet.first" to ::notNilSemantics,
     "java.sql.ResultSet.next" to ::notNilSemantics,
+    "java.lang.Integer.parseInt" to ::parseIntSemantics,
+    "java.lang.Integer.toString" to ::integerToStringSemantics,
 )
 
 fun hasSemantics(methodDecl: ResolvedMethodDeclaration): Boolean {
@@ -111,6 +113,18 @@ fun hasSemantics(methodDecl: ResolvedMethodDeclaration): Boolean {
 
 fun dispatchSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     return knownSemantics[self.asMethodCallExpr().resolve().qualifiedName]!!(self, env, receiver, args)
+}
+
+fun parseIntSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    if (args.size != 1 || receiver == null)
+        return AbstractValue.Call(self, self.calculateResolvedType(), receiver, self.asMethodCallExpr().nameAsString, args)
+    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.I2S, args[0])
+}
+
+fun integerToStringSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    if (args.size != 1 || receiver == null)
+        return AbstractValue.Call(self, self.calculateResolvedType(), receiver, self.asMethodCallExpr().nameAsString, args)
+    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.S2I, args[0])
 }
 
 fun prepareStatementSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
