@@ -21,6 +21,7 @@ import com.uchuhimo.konf.source.yaml
 import io.github.classgraph.ClassGraph
 import io.github.classgraph.MethodInfo
 import io.github.classgraph.ScanResult
+import java.io.File
 import java.lang.Exception
 import java.nio.file.Path
 
@@ -28,6 +29,7 @@ typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
 
 object AnalyzerSpec : ConfigSpec() {
+    val projectName by required<String>()
     val projectRoot by required<String>()
     val schemaFiles by required<List<String>>()
     val additionalClassPaths by optional(listOf<String>())
@@ -80,7 +82,7 @@ fun main() {
     val analyzer = Analyzer(config)
     analyzer.graphviz()
 
-    // Collect effects
+    // Collect effectual paths
     val effects = if (config[AnalyzerSpec.Debug.onlyEffects].isNotEmpty()) {
         config[AnalyzerSpec.Debug.onlyEffects]
     } else {
@@ -89,6 +91,9 @@ fun main() {
         }
         analyzer.nontrivialEffects()
     }
+
+    // Convert paths to effect triples
+    val effectMap = mutableMapOf<QualifiedName, MutableSet<Effect>>()
     for (effectMethodSig in effects) {
         if (analyzer.excludes(effectMethodSig))
             continue
@@ -103,11 +108,16 @@ fun main() {
             for (path in pathSet) {
                 val effect = Effect(analyzer, path)
                 effect.tryToAnalyze()
-                println(effect.pathCondition)
-                println(effect.argv)
-                println(effect.atoms)
+                effectMap.putIfAbsent(effectMethodSig, mutableSetOf())
+                effectMap[effectMethodSig]!!.add(effect)
             }
         }
+    }
+
+    // Generate RIGI
+    if (config[RigiSpec.generate]) {
+        val output = generateRigi(config[AnalyzerSpec.projectName], analyzer, effectMap)
+        File(config[RigiSpec.outputFile]).writeText(output)
     }
 }
 
@@ -222,6 +232,9 @@ class Analyzer(val cfg: Config) {
         Timer.end("db")
     }
 
+    /**
+     * Return a list of non-trivial effects. If an effect is non-trivial, it has an intragraph and it's not basic.
+     */
     fun nontrivialEffects(): List<QualifiedName> {
         val res = mutableListOf<QualifiedName>()
         for (e in intergraph.effect) {
