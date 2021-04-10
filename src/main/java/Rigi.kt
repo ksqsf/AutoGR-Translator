@@ -34,6 +34,7 @@ from Rigi.argvbuilder import *
 
 """)
         var cnt = 0
+        println("[RIGI] $op")
         for (effect in effectSet) {
             ob.appendLine(generateCond(effect, cnt, analyzer.enableCommute))
             ob.appendLine(generateCondSop(effect, cnt, analyzer.enableCommute))
@@ -133,6 +134,7 @@ fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>, enableCommute: B
 }
 
 fun generateCond(effect: Effect, suffix: Int, enableCommute: Boolean): String {
+    println("    [COND] ${effect.pathCondition}")
     fun pathConditionToRigi(pathCondition: MutableList<AbstractValue>): List<String> {
         val result = mutableListOf<String>()
         for (cond in pathCondition) {
@@ -235,6 +237,8 @@ fun generateCondSop(effect: Effect, suffix: Int, enableCommute: Boolean): String
 }
 
 fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
+    println("    [SOP]  ${effect.atoms}")
+
     val sb = StringBuilder()
     sb.append("    def sop$suffix(self, state, argv):\n")
 

@@ -32,6 +32,8 @@ analyzer:
     - com.hms.hms_test_2.DatabaseOperator.deleteTableRow
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
     - com.hms.hms_test_2.DatabaseOperator.customDeletion
+    # The following are too slow...
+    # - Receptionist.Receptionist.makeAppointment
 
   additional_semantics:
     - HealthPlus

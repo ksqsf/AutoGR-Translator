@@ -12,7 +12,6 @@ import java.io.File
 //
 //    Timer.start("effect")
 //    for (effectMethodSig in analyzer.intergraph.effect) {
-////    for (effectMethodSig in setOf("com.oltpbenchmark.benchmarks.healthplus.procedures.LabAssistant_updateAccountInfo.run(java.sql.Connection, java.lang.String)")) {
 //        println("*** $effectMethodSig ***")
 //        val g = analyzer.intragraphs[effectMethodSig] ?: continue
 //        println("This function contains ${g.loopCnt} loops")
