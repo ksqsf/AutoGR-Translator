@@ -12,11 +12,18 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     }
 
     open fun toRigi(): String {
-        throw IllegalArgumentException("This type can't be converted to Rigi")
+        throw IllegalArgumentException("This type ${this::class} can't be converted to Rigi")
     }
 
     open fun guessSql(): String {
         throw IllegalArgumentException("AbstractValue of type ${this::class} doesn't have SQL guesses")
+    }
+
+    /**
+     * whether this value is unknown. a free variable is not considered unknown.
+     */
+    open fun unknown(): Boolean {
+        return false
     }
 
     //
@@ -80,6 +87,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     ): AbstractValue(e, t){
         override fun toString(): String {
             return "(unknown from $expr)"
+        }
+
+        override fun unknown(): Boolean {
+            return true
         }
         override fun negate(expr: Expression): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
         override fun xor(expr: Expression, rhs: AbstractValue): AbstractValue { return Unknown(expr, expr.calculateResolvedType()) }
@@ -463,6 +474,9 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         val receiver: AbstractValue,
         val args: List<AbstractValue>
     ): AbstractValue(e, t) {
+        override fun unknown(): Boolean {
+            return receiver.unknown() || args.any { it.unknown() }
+        }
         override fun toString(): String {
             return "(invoke $receiver $args)"
         }
@@ -474,6 +488,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         val op: Operator,
         val value: AbstractValue
     ): AbstractValue(e, t) {
+        override fun unknown(): Boolean {
+            return value.unknown()
+        }
+
         override fun toString(): String {
             return "($op $value)"
         }
@@ -490,6 +508,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         val left: AbstractValue,
         val right: AbstractValue
     ): AbstractValue(e, t) {
+        override fun unknown(): Boolean {
+            return left.unknown() || right.unknown()
+        }
+
         override fun toString(): String {
             return "($op $left $right)"
         }
