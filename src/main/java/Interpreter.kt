@@ -143,23 +143,28 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 // varName is undefined.
                 if (variable == null) {
                     val javaType = expr.calculateResolvedType()
-                    // Free variables are arguments.
-                    if (!effect.argv.contains(varName)) {
-                        val typeStr = javaType.toString()
-                        if (typeStr.contains("String", ignoreCase = true)) {
-                            effect.addArgv(varName, Type.String)
-                        } else if (typeStr.contains("Double", ignoreCase = true) || typeStr.contains("Float", ignoreCase = true)) {
-                            effect.addArgv(varName, Type.Real)
-                        } else if (typeStr.contains("Date", ignoreCase = true)) {
-                            // effect.addArgv(varName, Type.Int)
-                            // FIXME: Use int for date
-                        } else if (typeStr.contains("Int", ignoreCase = true)) {
-                            effect.addArgv(varName, Type.Int)
-                        } else if (!typeStr.contains("Connection", ignoreCase = true)) {
-                            println("[WARN-INT] unknown arg type $typeStr")
-                        }
+                    val typeStr = javaType.toString()
+                    val type: Type? = if (typeStr.contains("String", ignoreCase = true)) {
+                        Type.String
+                    } else if (typeStr.contains("Double", ignoreCase = true) || typeStr.contains("Float", ignoreCase = true)) {
+                        Type.Real
+                    } else if (typeStr.contains("Date", ignoreCase = true)) {
+                        // effect.addArgv(varName, Type.Int)
+                        // FIXME: Use int for date
+                        Type.Int
+                    } else if (typeStr.contains("Int", ignoreCase = true)) {
+                        Type.Int
+                    } else if (typeStr.contains("Connection", ignoreCase = true)) {
+                        null
+                    } else {
+                        println("[WARN-INT] unknown arg type $typeStr")
+                        null
                     }
-                    return AbstractValue.Free(expr, javaType, varName)
+                    // Free variables are arguments.
+                    if (!effect.argv.contains(varName) && type != null) {
+                        effect.addArgv(varName, type)
+                    }
+                    return AbstractValue.Free(expr, javaType, varName, type)
                 } else {
                     return variable.get()
                 }
@@ -560,9 +565,9 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             var cnt = 1
             while (lookup("$ident$cnt") != null)
                 cnt += 1
-            AbstractValue.Free(null, null, "$ident$cnt")
+            AbstractValue.Free(null, null, "$ident$cnt", type)
         } else {
-            AbstractValue.Free(null, null, ident)
+            AbstractValue.Free(null, null, ident, type)
         }
         putVariable(av.name, av)
         effect.addArgv(av.name, type)

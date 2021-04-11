@@ -202,7 +202,7 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
         } else {
             val sep = format.indexOf("|")
             val exprStr = format.substring(sep + 1)
-            interpreter.lookup(exprStr)?.getKnown() ?: interpreter.freshArg(exprStr, Type.String)
+            interpreter.lookup(exprStr)?.getKnown()?.cast(contextualType) ?: interpreter.freshArg(exprStr, Type.String)
         }
     } else {
         val format = template.substringAfter("[[").substringBefore("]]")
@@ -212,7 +212,7 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
         } else {
             // Assume format is a NameExpr that refers to a local variable.
             // If it's `this.field` or `x[...]`, the lookup automatically fails.
-            interpreter.lookup(format)?.get() ?: interpreter.freshArg("unknown", contextualType)
+            interpreter.lookup(format)?.get()?.cast(contextualType) ?: interpreter.freshArg("unknown", contextualType)
         }
     }
 }

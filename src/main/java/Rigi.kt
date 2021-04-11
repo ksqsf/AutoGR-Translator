@@ -165,7 +165,7 @@ fun generateCond(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     }
     val sb = StringBuilder()
     sb.append("    def cond$suffix(self, state, argv):\n")
-    sb.append(loadArgv(effect, loadNext = true))
+    // sb.append(loadArgv(effect, loadNext = true))
     sb.append(emitter.toString())
     if (result.size == 0) {
         sb.append("        return True\n")
@@ -313,6 +313,8 @@ class Emitter(val indent: Int) {
     }
 
     /**
+     * Emit code x = y. If x exists and y is not the currently known value, a fresh name is generated and returned.
+     *
      * @return a fresh variable name to avoid naming conflicts.
      */
     fun emitAssign(x: String, y: String): String {
