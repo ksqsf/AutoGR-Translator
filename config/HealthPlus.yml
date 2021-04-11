@@ -18,7 +18,6 @@ analyzer:
 
   additional_basic_updates:
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
-    - com.hms.hms_test_2.DatabaseOperator.customSelection
 
   exclude_pattern:
     - ^com.hms.hms_test_2.DatabaseOperator
@@ -35,8 +34,8 @@ analyzer:
 
   debug:
     build_intergraph: true
-    only_effects: []
-    #  - Doctor.Doctor.updateProfileInfo(java.lang.String)
+    only_effects: []#["Doctor.Doctor.bill(java.lang.String, java.lang.String, java.lang.String)"]
+    #  - Pharmacist.Pharmacist.reduceStock(int, java.lang.String)
 
   # Enable optimizations to improve commutativity?
   opt: false
