@@ -493,8 +493,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     }
 
     data class Unary(
-        val e: Expression,
-        val t: ResolvedType,
+        val e: Expression?,
+        val t: ResolvedType?,
         val op: Operator,
         val value: AbstractValue
     ): AbstractValue(e, t) {

@@ -100,7 +100,7 @@ fun evalSqlSelect(sql: SqlSelect, interpreter: Interpreter, tvalues: Map<Int, Ab
     val columns = convertColumns(sql.columns ?: listOf(SqlAllColumn), defaultTable, schema, interpreter)
     // Now, for each column create a DbState.
     return AbstractValue.DbStateList(null, null, sql, columns.map {
-        AbstractValue.DbState(null, null, null, it.first, it.second, locators)
+        AbstractValue.DbState(null, null, it.first, it.second, locators)
     })
 }
 
@@ -228,11 +228,11 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
         }
         val col = select.columns!![0] as SqlSingleColumn
         // Workaround some bugs in the original code.
-        try {
-            return AbstractValue.DbState(null, null, null, selectTbl[col.name]!!, col.aggregateKind, locators)
+        return try {
+            AbstractValue.DbState(null, null, selectTbl[col.name]!!, col.aggregateKind, locators)
         } catch (e: NullPointerException) {
             println("[ERR] select table doesn't have ${col.name}, this is likely to be a bug in the original project; expr=$expr")
-            return AbstractValue.DbState(null, null, null, table[col.name]!!, col.aggregateKind, locators)
+            AbstractValue.DbState(null, null, table[col.name]!!, col.aggregateKind, locators)
         }
     }
 
@@ -246,7 +246,7 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
         is SqlSingleton -> return singletonToDbState(expr.query, interpreter.schema)
         is SqlColRef -> {
             val col = table[expr.column.name]!!
-            return AbstractValue.DbState(null, null, null, col, expr.column.aggregateKind)
+            return AbstractValue.DbState(null, null, col, expr.column.aggregateKind)
         }
         is SqlBinary -> {
             val left = evalSQLExpr(expr.left, table, interpreter, Type.Int, tvalues)

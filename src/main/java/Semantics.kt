@@ -158,9 +158,10 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
             val where = selectBody.where
             val items = selectBody.selectItems
             val tables = TablesNamesFinder().getTableList(sql)
+            val locators = whereToLocators(receiver, env.schema[tables[0]]!!, selectBody.where)
 
-            val rs = AbstractValue.ResultSet(self, self.calculateResolvedType(), receiver, selectBody)
-            rs.tables = tables.map { env.schema.get(it)!! }.toList()
+            val rs = AbstractValue.ResultSet(self, self.calculateResolvedType(), receiver, selectBody, locators)
+            rs.tables = tables.map { env.schema[it]!! }.toList()
 
             // Collect columns
             if (items.size == 1) {
@@ -322,10 +323,9 @@ fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractVal
         return AbstractValue.Unknown(self, self.calculateResolvedType())
     }
 
-    val receiver = receiver!! as AbstractValue.ResultSet
     val idx = (args[0] as AbstractValue.Data).data as Long
     val (column, aggKind) = receiver.columns[idx.toInt() - 1]
-    val value = AbstractValue.DbState(self, self.calculateResolvedType(), receiver, column, aggKind)
+    val value = AbstractValue.DbState(self, self.calculateResolvedType(), column, aggKind, receiver.locators)
     val argName = "${column.table.name}_${column.name}"
     env.effect.addArgv(argName, column.type)
     return value
@@ -410,7 +410,7 @@ fun evalSqlExpr(expr: net.sf.jsqlparser.expression.Expression, sql: AbstractValu
         return AbstractValue.Data(null, null, false)
     } else if (expr is net.sf.jsqlparser.schema.Column) {
         val colName = expr.columnName
-        return AbstractValue.DbState(null, null, null, table.get(colName)!!, AggregateKind.ID)
+        return AbstractValue.DbState(null, null, table[colName]!!, AggregateKind.ID, null)
     } else if (expr is Subtraction) {
         val left = evalSqlExpr(expr.leftExpression, sql, table)
         val right = evalSqlExpr(expr.rightExpression, sql, table)
