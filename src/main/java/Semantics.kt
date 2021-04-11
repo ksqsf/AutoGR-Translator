@@ -399,7 +399,7 @@ fun evalSqlExpr(expr: net.sf.jsqlparser.expression.Expression, sql: AbstractValu
     } else if (Regex("\\d+").matches(exprStr)) {
         return AbstractValue.Data(null, null, exprStr.toInt())
     } else if (Regex("[nN][oO][wW] *\\( *\\)").matches(exprStr)) {
-        return AbstractValue.Free(null, null, "now")
+        return AbstractValue.Free(null, null, "now", Type.Int)
     } else if (exprStr.contains("null", ignoreCase = true)) {
         return AbstractValue.Null(null, null)
     } else if (exprStr == "?") {

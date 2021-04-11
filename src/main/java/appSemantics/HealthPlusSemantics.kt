@@ -275,7 +275,7 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
  */
 fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
     if (funcName.equals("now", ignoreCase = true)) {
-        return AbstractValue.Free(null, null, "now")
+        return AbstractValue.Free(null, null, "now", Type.Int)
     } else {
         throw IllegalArgumentException("Unknown SQL function $funcName")
     }

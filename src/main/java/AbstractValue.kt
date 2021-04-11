@@ -12,6 +12,29 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     }
 
     /**
+     * Try to determine the type of an immediate value, only using information about this value itself.
+     *
+     * Immediate typed values include: Data, DbState, and Free.
+     */
+    open fun type(): Type? {
+        return null
+    }
+
+    /**
+     * Try to cast this value to another type. Returns the same value if it cannot be cast.
+     */
+    fun cast(toType: Type): AbstractValue {
+        val thisType = this.type()
+        return if (thisType == Type.String && toType == Type.Int) {
+            Unary(null, null, Operator.S2I, this)
+        } else if (thisType == Type.Int && toType == Type.String) {
+            Unary(null, null, Operator.I2S, this)
+        } else {
+            this
+        }
+    }
+
+    /**
      * Returns a Python reference (variable name), while the actual computation is emitted to the emitter.
      */
     open fun toRigi(emitter: Emitter): String {
@@ -301,13 +324,27 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
                 else -> super.toRigi(emitter)
             }
         }
+
+        override fun type(): Type? {
+            return when (data) {
+                is String -> Type.String
+                is Int -> Type.Int
+                is Long -> Type.Int
+                is Short -> Type.Int
+                is Double -> Type.Real
+                is Float -> Type.Real
+                is Boolean -> Type.Bool
+                else -> null
+            }
+        }
     }
 
     // Variable names that occur free
     data class Free(
         val e: Expression?,
         val t: ResolvedType?,
-        val name: String
+        val name: String,
+        val type: Type?
     ): AbstractValue(e, t) {
         override fun toString(): String {
             return "(free $name)"
@@ -319,6 +356,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
         override fun toRigi(emitter: Emitter): String {
             return emitter.emitAssign(name, "argv['@OP@']['$name']")
+        }
+
+        override fun type(): Type? {
+            return type
         }
     }
 
@@ -400,6 +441,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             val locatorStr = locatorsToRigi((locators ?: emitter.context.currentLocators)!!, emitter)
             val value = "state['TABLE_${column.table.name}'].get(${locatorStr}, '${column.name}')"
             return emitter.emitAssign(name, value)
+        }
+
+        override fun type(): Type {
+            return column.type
         }
     }
 

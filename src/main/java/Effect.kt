@@ -6,7 +6,7 @@
 // Side effect is a SQL statement that updates the DB state.
 class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
 
-    val interpreter = Interpreter(sourcePath.intragraph, analyzer.schema, this)
+    private val interpreter = Interpreter(sourcePath.intragraph, analyzer.schema, this)
     val argv = mutableMapOf<String, Type>()
     val pathCondition = mutableListOf<AbstractValue>()
     val next = mutableListOf<Effect>()
@@ -59,9 +59,22 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
 
     private fun introduceParameters() {
         for (arg in sourcePath.intragraph.methodDecl.parameters) {
-            val av = AbstractValue.Free(null, null, arg.name.asString())
-            interpreter.putVariable(arg.name.asString(), av)
-            println("-free ${arg.name.asString()}")
+            val name = arg.name.asString()
+            val tyStr = arg.typeAsString.toLowerCase()
+            val ty = if (tyStr.contains("string")) {
+                Type.String
+            } else if (tyStr.contains("int") || tyStr.contains("long") || tyStr.contains("short")) {
+                Type.Int
+            } else if (tyStr.contains("float") || tyStr.contains("double")) {
+                Type.Real
+            } else {
+                println("[WARN] param $name of unknown type $tyStr")
+                continue
+            }
+            val av = AbstractValue.Free(null, null, arg.name.asString(), ty)
+            interpreter.putVariable(name, av)
+            addArgv(name, ty)
+            println("-free ${arg.name.asString()} $ty")
         }
     }
 
@@ -76,7 +89,6 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
 
         // 2. All parameters are declared free.
         introduceParameters()
-        println("after introduce ${interpreter.lookup("userid")}")
 
         // 3. Eval this path, and build an easier representation of its effect.
         interpreter.run(sourcePath)
