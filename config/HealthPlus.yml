@@ -20,9 +20,13 @@ analyzer:
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
     - com.hms.hms_test_2.DatabaseOperator.customSelection
 
-  exclude_prefix:
-    - com.hms.hms_test_2.DatabaseOperator
-    - com.hms.hms_test_2.User
+  exclude_pattern:
+    - ^com.hms.hms_test_2.DatabaseOperator
+    - ^com.hms.hms_test_2.User
+    - Controller$
+    - ^com.hms.hms_test_2.Validate
+    - ^com.hms.hms_test_2.AllMessages
+    - ^Receptionist.DoctorDetail
     # The following are too slow...
     # - Receptionist.Receptionist.makeAppointment
 
@@ -30,8 +34,9 @@ analyzer:
     - HealthPlus
 
   debug:
-    build_intergraph: true
-    only_effects: []
+    build_intergraph: false
+    only_effects:
+      - Doctor.Doctor.updateProfileInfo(java.lang.String)
 
   # Enable optimizations to improve commutativity?
   opt: false

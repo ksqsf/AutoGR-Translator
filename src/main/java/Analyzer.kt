@@ -39,7 +39,7 @@ object AnalyzerSpec : ConfigSpec() {
     val additionalBasicEffects by optional(listOf<String>())
     val additionalBasicUpdates by optional(listOf<String>())
     val additionalSemantics by optional(listOf<String>())
-    val excludePrefix by optional(listOf<String>())
+    val excludePattern by optional(listOf<String>())
     val opt by optional(false)
 
     object Graphviz : ConfigSpec() {
@@ -275,397 +275,401 @@ class Analyzer(val cfg: Config) {
     /**
      * Check if the given method signature is excluded from analysis.
      *
-     * @param effectMethodSig
+     * @param sig
      */
-    fun excludes(effectMethodSig: String): Boolean {
-        for (excluded in cfg[AnalyzerSpec.excludePrefix]) {
-            if (effectMethodSig.startsWith(excluded))
+    fun excludes(sig: String): Boolean {
+        for (pat in cfg[AnalyzerSpec.excludePattern]) {
+            if (pat.toRegex().containsMatchIn(sig)) {
                 return true
+            }
         }
         return false
     }
-}
 
-/**
- * Build intra-graph for a compilation unit.
- */
-fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
+    /**
+     * Build intra-graph for a compilation unit.
+     */
+    private fun buildIntraGraph(file: CompilationUnit, intraGraphs: IntraGraphSet) {
 
-    val ndebug = true
-    data class BlockVisitorArg(val classDef: ClassOrInterfaceDeclaration, val methodDecl: MethodDeclaration)
+        val ndebug = true
+        data class BlockVisitorArg(val classDef: ClassOrInterfaceDeclaration, val methodDecl: MethodDeclaration)
 
-    fun debug(s: String) {
-        if (!ndebug)
-            println(s)
-    }
-
-    val exceptionVisitor = object : GenericVisitorAdapter<List<ResolvedType>, Void>() {
-        override fun visit(binaryExpr: BinaryExpr, arg: Void?): List<ResolvedType>? {
-            val left = binaryExpr.left.accept(this, arg)
-            val right = binaryExpr.right.accept(this, arg)
-            if (left == null) return right
-            if (right == null) return left
-            return left + right
+        fun debug(s: String) {
+            if (!ndebug)
+                println(s)
         }
 
-        override fun visit(call: MethodCallExpr, arg: Void?): List<ResolvedType>? {
-            val args = call.arguments
-            val argExc = args.mapNotNull { it.accept(this, arg) }.flatten()
-            try {
-                val resolvedCall = call.resolve()
-                val res = (resolvedCall.specifiedExceptions + argExc).filterNotNull()
-                if (res.isNotEmpty())
-                    return res
-                else
+        val exceptionVisitor = object : GenericVisitorAdapter<List<ResolvedType>, Void>() {
+            override fun visit(binaryExpr: BinaryExpr, arg: Void?): List<ResolvedType>? {
+                val left = binaryExpr.left.accept(this, arg)
+                val right = binaryExpr.right.accept(this, arg)
+                if (left == null) return right
+                if (right == null) return left
+                return left + right
+            }
+
+            override fun visit(call: MethodCallExpr, arg: Void?): List<ResolvedType>? {
+                val args = call.arguments
+                val argExc = args.mapNotNull { it.accept(this, arg) }.flatten()
+                try {
+                    val resolvedCall = call.resolve()
+                    val res = (resolvedCall.specifiedExceptions + argExc).filterNotNull()
+                    if (res.isNotEmpty())
+                        return res
+                    else
+                        return null
+                } catch (e: Exception) {
+                    println("[WARN] ignore $call due to $e")
+                    // FIXME
                     return null
-            } catch (e: Exception) {
-                println("[WARN] ignore $call due to $e")
-                // FIXME
-                return null
+                }
             }
         }
-    }
 
-    val blockVisitor = object : GenericVisitorAdapter<IntraGraph, BlockVisitorArg>() {
-        var depth = 0
+        val blockVisitor = object : GenericVisitorAdapter<IntraGraph, BlockVisitorArg>() {
+            var depth = 0
 
-        override fun visit(blockStmt: BlockStmt, arg: BlockVisitorArg): IntraGraph {
-            debug(" ".repeat(depth) + ".Find block")
-            depth += 1
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            if (blockStmt.childNodes.size == 0) {
+            override fun visit(blockStmt: BlockStmt, arg: BlockVisitorArg): IntraGraph {
+                debug(" ".repeat(depth) + ".Find block")
+                depth += 1
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                if (blockStmt.childNodes.size == 0) {
+                    g.addEdgeFromEntryToExit()
+                    return g
+                }
+                val subG = blockStmt.statements.map { it.accept(this, arg) }
+                g.sequence(subG)
+                depth -= 1
+                return g
+            }
+
+            override fun visit(whileStmt: WhileStmt, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                val bodyG = whileStmt.body.accept(this, arg)
+                g.union(bodyG, mergeBreak = false, mergeContinue = false)
+                val cond = whileStmt.condition
+                if (cond == BooleanLiteralExpr(true)) {
+                    g.addEdgeId(g.entryId, bodyG.entryId)
+                } else {
+                    g.addEdgeId(g.entryId, bodyG.entryId, Label.Br(cond))
+                    g.addEdgeFromEntryToExit(Label.BrNot(cond))
+                }
+                g.addEdgeId(bodyG.exitId, g.entryId)
+                g.addEdgeId(bodyG.breakId, g.exitId)
+                g.addEdgeId(bodyG.continueId, g.entryId)
+                g.loopCnt += 1
+                return g
+            }
+
+            override fun visit(doStmt: DoStmt, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                val bodyG = doStmt.body.accept(this, arg)
+                g.union(bodyG, mergeBreak = false, mergeContinue = false)
+                val cond = doStmt.condition
+                g.addEdgeId(g.entryId, bodyG.entryId)
+                if (cond == BooleanLiteralExpr(true)) {
+                    g.addEdgeId(bodyG.exitId, g.entryId)
+                } else {
+                    g.addEdgeId(bodyG.exitId, g.entryId, Label.Br(cond))
+                    g.addEdgeId(
+                        bodyG.exitId,
+                        g.exitId,
+                        Label.BrNot(cond)
+                    )
+                }
+                g.addEdgeId(bodyG.continueId, bodyG.exitId)
+                g.addEdgeId(bodyG.breakId, g.exitId)
+                g.loopCnt += 1
+                return g
+            }
+
+            override fun visit(breakStmt: BreakStmt, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                g.addEdgeId(g.entryId, g.breakId)
+                return g
+            }
+
+            override fun visit(continueStmt: ContinueStmt, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                g.addEdgeId(g.entryId, g.continueId)
+                return g
+            }
+
+            override fun visit(ifStmt: IfStmt, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                val cond = ifStmt.condition
+                debug(" ".repeat(depth) + ".Find if " + cond)
+
+                val thenStmt = ifStmt.thenStmt
+                val thenG = thenStmt.accept(this, arg)
+                if (ifStmt.elseStmt.isPresent) {
+                    val elseStmt = ifStmt.elseStmt.get()
+                    val elseG = elseStmt.accept(this, arg)
+                    g.addBetweenEntryAndExit(thenG, Label.Br(cond))
+                    g.addBetweenEntryAndExit(elseG, Label.BrNot(cond))
+                } else {
+                    g.addBetweenEntryAndExit(thenG, Label.Br(cond))
+                    g.addEdgeFromEntryToExit(Label.BrNot(cond))
+                }
+                return g
+            }
+
+            override fun visit(expressionStmt: ExpressionStmt, arg: BlockVisitorArg): IntraGraph {
+                debug(" ".repeat(depth) + ".Find expr " + expressionStmt)
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                g.addEdgeFromEntry(expressionStmt, depth)
+                g.addEdgeToExit(expressionStmt, depth)
+                val exc = expressionStmt.expression.accept(exceptionVisitor, null)
+                if (exc != null) {
+                    for (e in exc) {
+                        g.addEdgeToExcept(expressionStmt, depth, Label.Raise(e, expressionStmt.expression))
+                    }
+                }
+                return g
+            }
+
+            override fun visit(throwStmt: ThrowStmt, arg: BlockVisitorArg): IntraGraph {
+                debug(" ".repeat(depth) + ".Find expr " + throwStmt)
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                val e = throwStmt.expression
+                val ty = e.calculateResolvedType()
+                g.addEdgeFromEntry(throwStmt, depth)
+                g.addEdgeToExcept(throwStmt, depth, Label.Raise(ty, e))
+                return g
+            }
+
+            override fun visit(tryStmt: TryStmt, arg: BlockVisitorArg): IntraGraph {
+                debug(" ".repeat(depth) + ".Find try")
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                val bodyG = tryStmt.tryBlock.accept(this, arg)
+                g.union(bodyG, mergeExcept = false)
+                g.addEdgeId(g.entryId, bodyG.entryId)
+                if (tryStmt.finallyBlock.isPresent) {
+                    val finallyG = tryStmt.finallyBlock.get().accept(this, arg)
+                    val finallyGEx = finallyG.clone()
+                    g.union(finallyG, mergeExcept = false)
+                    g.union(finallyGEx, mergeExcept = false)
+                    g.addEdgeId(bodyG.exitId, finallyG.entryId)
+                    g.addEdgeId(finallyG.exitId, g.exitId)
+                    for (catch in tryStmt.catchClauses) {
+                        val catchG = catch.body.accept(this, arg)
+                        val ty = catch.parameter.type.resolve()
+                        val name = catch.parameter.name
+                        g.union(catchG, mergeExcept = false)
+                        g.addEdgeId(bodyG.exceptId, catchG.entryId, Label.Catch(name, ty))
+                        g.addEdgeId(catchG.exceptId, finallyGEx.entryId)
+                        g.addEdgeId(finallyGEx.exitId, g.exceptId)
+                        g.addEdgeId(catchG.exitId, finallyG.entryId)
+                    }
+                } else {
+                    g.addEdgeId(bodyG.exitId, g.exitId)
+                    for (catch in tryStmt.catchClauses) {
+                        val catchG = catch.body.accept(this, arg)
+                        val ty = catch.parameter.type.resolve()
+                        val name = catch.parameter.name
+                        g.union(catchG, mergeExcept = false)
+                        g.addEdgeId(bodyG.exceptId, catchG.entryId, Label.Catch(name, ty))
+                        g.addEdgeId(catchG.exceptId, g.exceptId)
+                        g.addEdgeId(catchG.exitId, g.exitId)
+                    }
+                }
+                return g
+            }
+
+            override fun visit(emptyStmt: EmptyStmt, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
                 g.addEdgeFromEntryToExit()
                 return g
             }
-            val subG = blockStmt.statements.map { it.accept(this, arg) }
-            g.sequence(subG)
-            depth -= 1
-            return g
-        }
 
-        override fun visit(whileStmt: WhileStmt, arg: BlockVisitorArg): IntraGraph {
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            val bodyG = whileStmt.body.accept(this, arg)
-            g.union(bodyG, mergeBreak = false, mergeContinue = false)
-            val cond = whileStmt.condition
-            if (cond == BooleanLiteralExpr(true)) {
-                g.addEdgeId(g.entryId, bodyG.entryId)
-            } else {
-                g.addEdgeId(g.entryId, bodyG.entryId, Label.Br(cond))
-                g.addEdgeFromEntryToExit(Label.BrNot(cond))
+            override fun visit(returnStmt: ReturnStmt, arg: BlockVisitorArg): IntraGraph {
+                debug(" ".repeat(depth) + ".Find return")
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                g.addEdgeFromEntry(returnStmt, depth)
+                g.addEdgeToReturn(returnStmt, depth)
+                return g
             }
-            g.addEdgeId(bodyG.exitId, g.entryId)
-            g.addEdgeId(bodyG.breakId, g.exitId)
-            g.addEdgeId(bodyG.continueId, g.entryId)
-            g.loopCnt += 1
-            return g
         }
 
-        override fun visit(doStmt: DoStmt, arg: BlockVisitorArg): IntraGraph {
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            val bodyG = doStmt.body.accept(this, arg)
-            g.union(bodyG, mergeBreak = false, mergeContinue = false)
-            val cond = doStmt.condition
-            g.addEdgeId(g.entryId, bodyG.entryId)
-            if (cond == BooleanLiteralExpr(true)) {
-                g.addEdgeId(bodyG.exitId, g.entryId)
-            } else {
-                g.addEdgeId(bodyG.exitId, g.entryId, Label.Br(cond))
-                g.addEdgeId(
-                    bodyG.exitId,
-                    g.exitId,
-                    Label.BrNot(cond)
-                )
+        val topVisitor = object : VoidVisitorAdapter<IntraGraphSet>() {
+            var classDef: ClassOrInterfaceDeclaration? = null
+            var methodDecl: MethodDeclaration? = null
+
+            override fun visit(decl: ClassOrInterfaceDeclaration, gs: IntraGraphSet) {
+                if (decl.fullyQualifiedName.isEmpty || excludes(decl.fullyQualifiedName.get()))
+                    return
+                classDef = decl
+                super.visit(decl, gs)
             }
-            g.addEdgeId(bodyG.continueId, bodyG.exitId)
-            g.addEdgeId(bodyG.breakId, g.exitId)
-            g.loopCnt += 1
-            return g
-        }
 
-        override fun visit(breakStmt: BreakStmt, arg: BlockVisitorArg): IntraGraph {
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            g.addEdgeId(g.entryId, g.breakId)
-            return g
-        }
-
-        override fun visit(continueStmt: ContinueStmt, arg: BlockVisitorArg): IntraGraph {
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            g.addEdgeId(g.entryId, g.continueId)
-            return g
-        }
-
-        override fun visit(ifStmt: IfStmt, arg: BlockVisitorArg): IntraGraph {
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            val cond = ifStmt.condition
-            debug(" ".repeat(depth) + ".Find if " + cond)
-
-            val thenStmt = ifStmt.thenStmt
-            val thenG = thenStmt.accept(this, arg)
-            if (ifStmt.elseStmt.isPresent) {
-                val elseStmt = ifStmt.elseStmt.get()
-                val elseG = elseStmt.accept(this, arg)
-                g.addBetweenEntryAndExit(thenG, Label.Br(cond))
-                g.addBetweenEntryAndExit(elseG, Label.BrNot(cond))
-            } else {
-                g.addBetweenEntryAndExit(thenG, Label.Br(cond))
-                g.addEdgeFromEntryToExit(Label.BrNot(cond))
-            }
-            return g
-        }
-
-        override fun visit(expressionStmt: ExpressionStmt, arg: BlockVisitorArg): IntraGraph {
-            debug(" ".repeat(depth) + ".Find expr " + expressionStmt)
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            g.addEdgeFromEntry(expressionStmt, depth)
-            g.addEdgeToExit(expressionStmt, depth)
-            val exc = expressionStmt.expression.accept(exceptionVisitor, null)
-            if (exc != null) {
-                for (e in exc) {
-                    g.addEdgeToExcept(expressionStmt, depth, Label.Raise(e, expressionStmt.expression))
+            override fun visit(decl: MethodDeclaration, gs: IntraGraphSet) {
+                methodDecl = decl
+                val qname = decl.resolve().qualifiedSignature
+                println("Analyzing ${qname} hasBody=${decl.body.isPresent}")
+                if (decl.body.isPresent) {
+                    val g = decl.body.get().accept(blockVisitor, BlockVisitorArg(classDef!!, methodDecl!!))
+                    g.optimize()
+                    gs[qname] = g
                 }
             }
-            return g
         }
 
-        override fun visit(throwStmt: ThrowStmt, arg: BlockVisitorArg): IntraGraph {
-            debug(" ".repeat(depth) + ".Find expr " + throwStmt)
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            val e = throwStmt.expression
-            val ty = e.calculateResolvedType()
-            g.addEdgeFromEntry(throwStmt, depth)
-            g.addEdgeToExcept(throwStmt, depth, Label.Raise(ty, e))
-            return g
-        }
-
-        override fun visit(tryStmt: TryStmt, arg: BlockVisitorArg): IntraGraph {
-            debug(" ".repeat(depth) + ".Find try")
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            val bodyG = tryStmt.tryBlock.accept(this, arg)
-            g.union(bodyG, mergeExcept = false)
-            g.addEdgeId(g.entryId, bodyG.entryId)
-            if (tryStmt.finallyBlock.isPresent) {
-                val finallyG = tryStmt.finallyBlock.get().accept(this, arg)
-                val finallyGEx = finallyG.clone()
-                g.union(finallyG, mergeExcept = false)
-                g.union(finallyGEx, mergeExcept = false)
-                g.addEdgeId(bodyG.exitId, finallyG.entryId)
-                g.addEdgeId(finallyG.exitId, g.exitId)
-                for (catch in tryStmt.catchClauses) {
-                    val catchG = catch.body.accept(this, arg)
-                    val ty = catch.parameter.type.resolve()
-                    val name = catch.parameter.name
-                    g.union(catchG, mergeExcept = false)
-                    g.addEdgeId(bodyG.exceptId, catchG.entryId, Label.Catch(name, ty))
-                    g.addEdgeId(catchG.exceptId, finallyGEx.entryId)
-                    g.addEdgeId(finallyGEx.exitId, g.exceptId)
-                    g.addEdgeId(catchG.exitId, finallyG.entryId)
-                }
-            } else {
-                g.addEdgeId(bodyG.exitId, g.exitId)
-                for (catch in tryStmt.catchClauses) {
-                    val catchG = catch.body.accept(this, arg)
-                    val ty = catch.parameter.type.resolve()
-                    val name = catch.parameter.name
-                    g.union(catchG, mergeExcept = false)
-                    g.addEdgeId(bodyG.exceptId, catchG.entryId, Label.Catch(name, ty))
-                    g.addEdgeId(catchG.exceptId, g.exceptId)
-                    g.addEdgeId(catchG.exitId, g.exitId)
-                }
-            }
-            return g
-        }
-
-        override fun visit(emptyStmt: EmptyStmt, arg: BlockVisitorArg): IntraGraph {
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            g.addEdgeFromEntryToExit()
-            return g
-        }
-
-        override fun visit(returnStmt: ReturnStmt, arg: BlockVisitorArg): IntraGraph {
-            debug(" ".repeat(depth) + ".Find return")
-            val g = IntraGraph(arg.classDef, arg.methodDecl)
-            g.addEdgeFromEntry(returnStmt, depth)
-            g.addEdgeToReturn(returnStmt, depth)
-            return g
-        }
+        file.accept(topVisitor, intraGraphs)
     }
 
-    val topVisitor = object : VoidVisitorAdapter<IntraGraphSet>() {
-        var classDef: ClassOrInterfaceDeclaration? = null
-        var methodDecl: MethodDeclaration? = null
 
-        override fun visit(decl: ClassOrInterfaceDeclaration, gs: IntraGraphSet) {
-            classDef = decl
-            super.visit(decl, gs)
-        }
-
-        override fun visit(decl: MethodDeclaration, gs: IntraGraphSet) {
-            methodDecl = decl
-            val qname = decl.resolve().qualifiedSignature
-            println("Analyzing ${qname} hasBody=${decl.body.isPresent}")
-            if (decl.body.isPresent) {
-                val g = decl.body.get().accept(blockVisitor, BlockVisitorArg(classDef!!, methodDecl!!))
-                g.optimize()
-                gs[qname] = g
+    /**
+     * Class Hierarchy Analysis
+     */
+    private fun chaResolve(expr: MethodCallExpr, classGraph: ScanResult): List<String> {
+        val decl: ResolvedMethodDeclaration?
+        try {
+            decl = expr.resolve()
+        } catch (e : Exception) {
+            // JavaParser cannot resolve some method calls. Just ignore them here.
+            if (expr.name.asString().contains("get")) {
+                println("[WARN] ignore $expr due to $e")
+                return emptyList()
+            } else {
+                throw e
             }
         }
-    }
+        val result = mutableListOf<String>()
+        if (decl.isStatic || expr.scope.isPresent && expr.scope.get().isSuperExpr) {
+            // Java Symbol Solver can handle `super`
+            return listOf(decl.qualifiedSignature)
+        }
 
-    file.accept(topVisitor, intraGraphs)
-}
-
-/**
- * Class Hierarchy Analysis
- */
-fun chaResolve(expr: MethodCallExpr, classGraph: ScanResult): List<String> {
-    val decl: ResolvedMethodDeclaration?
-    try {
-        decl = expr.resolve()
-    } catch (e : Exception) {
-        // JavaParser cannot resolve some method calls. Just ignore them here.
-        if (expr.name.asString().contains("get")) {
-            println("[WARN] ignore $expr due to $e")
-            return emptyList()
+        // Virtual calls
+        val staticType = if (decl.packageName == "") {
+            decl.className
         } else {
-            throw e
+            decl.packageName + "." + decl.className
         }
-    }
-    val result = mutableListOf<String>()
-    if (decl.isStatic || expr.scope.isPresent && expr.scope.get().isSuperExpr) {
-        // Java Symbol Solver can handle `super`
-        return listOf(decl.qualifiedSignature)
-    }
 
-    // Virtual calls
-    val staticType = if (decl.packageName == "") {
-        decl.className
-    } else {
-        decl.packageName + "." + decl.className
-    }
+        // Treat SQL-related packages specially
+        if (setOf("java.sql", "javax.sql").contains(decl.packageName)) {
+            return listOf(decl.qualifiedSignature)
+        }
 
-    // Treat SQL-related packages specially
-    if (setOf("java.sql", "javax.sql").contains(decl.packageName)) {
-        return listOf(decl.qualifiedSignature)
-    }
+        val typeInfo = classGraph.getClassInfo(staticType)
+            ?: // There's no more information
+            return listOf(decl.qualifiedSignature)
 
-    val typeInfo = classGraph.getClassInfo(staticType)
-        ?: // There's no more information
-        return listOf(decl.qualifiedSignature)
+        // A default method has code
+        if (typeInfo.isInterface && decl.isDefaultMethod) {
+            result.add(decl.qualifiedSignature)
+        } else if (typeInfo.isArrayClass || typeInfo.isExternalClass || typeInfo.isInnerClass
+            || typeInfo.isOuterClass || typeInfo.isStandardClass || typeInfo.isAnonymousInnerClass
+        ) {
+            result.add(decl.qualifiedSignature)
+        }
 
-    // A default method has code
-    if (typeInfo.isInterface && decl.isDefaultMethod) {
-        result.add(decl.qualifiedSignature)
-    } else if (typeInfo.isArrayClass || typeInfo.isExternalClass || typeInfo.isInnerClass
-        || typeInfo.isOuterClass || typeInfo.isStandardClass || typeInfo.isAnonymousInnerClass
-    ) {
-        result.add(decl.qualifiedSignature)
-    }
-
-    // Add all implementations / subclasses
-    fun getSig(m: MethodInfo): String {
-        val sb = StringBuilder()
-        sb.append(m.name)
-        sb.append("(")
-        if (m.parameterInfo.isNotEmpty()) {
-            sb.append(m.parameterInfo[0].typeDescriptor)
-            for (i in 1 until m.parameterInfo.size) {
-                sb.append(", ")
-                sb.append(m.parameterInfo[i].typeDescriptor)
+        // Add all implementations / subclasses
+        fun getSig(m: MethodInfo): String {
+            val sb = StringBuilder()
+            sb.append(m.name)
+            sb.append("(")
+            if (m.parameterInfo.isNotEmpty()) {
+                sb.append(m.parameterInfo[0].typeDescriptor)
+                for (i in 1 until m.parameterInfo.size) {
+                    sb.append(", ")
+                    sb.append(m.parameterInfo[i].typeDescriptor)
+                }
             }
+            sb.append(")")
+            return sb.toString()
         }
-        sb.append(")")
-        return sb.toString()
-    }
 
-    fun getQualifiedSig(m: MethodInfo): String {
-        val sb = StringBuilder()
-        if (m.classInfo.packageName != "") {
-            sb.append(m.classInfo.packageName)
+        fun getQualifiedSig(m: MethodInfo): String {
+            val sb = StringBuilder()
+            if (m.classInfo.packageName != "") {
+                sb.append(m.classInfo.packageName)
+                sb.append(".")
+            }
+            sb.append(m.className)
             sb.append(".")
+            sb.append(getSig(m))
+            return sb.toString()
         }
-        sb.append(m.className)
-        sb.append(".")
-        sb.append(getSig(m))
-        return sb.toString()
-    }
 
-    val downcast = if (typeInfo.isInterface) {
-        typeInfo.classesImplementing
-    } else {
-        typeInfo.subclasses
-    }
+        val downcast = if (typeInfo.isInterface) {
+            typeInfo.classesImplementing
+        } else {
+            typeInfo.subclasses
+        }
 //    println("virtual call: $expr, which has sig ${decl.signature}")
-    for (klass in downcast) {
-        for (m in klass.methodInfo[decl.name]) {
-            if (getSig(m) == decl.signature) {
-                result.add(getQualifiedSig(m))
+        for (klass in downcast) {
+            for (m in klass.methodInfo[decl.name]) {
+                if (getSig(m) == decl.signature) {
+                    result.add(getQualifiedSig(m))
 //                println("  Possibly ${getQualifiedSig(m)}")
+                }
             }
         }
+        return result.toList()
     }
-    return result.toList()
-}
 
-/**
- * Build the inter-graph for the project.
- */
-fun buildInterGraph(file: CompilationUnit): InterGraph {
-    val fileVisitor = object : VoidVisitorAdapter<InterGraph>() {
-        var currentSig: String? = null
-        val classGraph = ClassGraph().enableAllInfo().scan()
+    /**
+     * Build the inter-graph for the project.
+     */
+    private fun buildInterGraph(file: CompilationUnit): InterGraph {
+        val fileVisitor = object : VoidVisitorAdapter<InterGraph>() {
+            var currentSig: String? = null
+            val classGraph = ClassGraph().enableAllInfo().scan()
 
-        override fun visit(decl: ClassOrInterfaceDeclaration, g: InterGraph) {
-            currentSig = decl.resolve().qualifiedName
-            super.visit(decl, g)
-        }
+            override fun visit(decl: ClassOrInterfaceDeclaration, g: InterGraph) {
+                currentSig = decl.resolve().qualifiedName
+                super.visit(decl, g)
+            }
 
-        override fun visit(decl: ConstructorDeclaration, g: InterGraph) {
-            currentSig = decl.resolve().qualifiedSignature
-            super.visit(decl, g)
-        }
+            override fun visit(decl: ConstructorDeclaration, g: InterGraph) {
+                currentSig = decl.resolve().qualifiedSignature
+                super.visit(decl, g)
+            }
 
-        override fun visit(decl: MethodDeclaration, g: InterGraph) {
-            currentSig = decl.resolve().qualifiedSignature
-            super.visit(decl, g)
-        }
+            override fun visit(decl: MethodDeclaration, g: InterGraph) {
+                currentSig = decl.resolve().qualifiedSignature
+                super.visit(decl, g)
+            }
 
-        override fun visit(expr: ObjectCreationExpr, g: InterGraph) {
-            g.add(currentSig!!, expr.resolve().qualifiedSignature)
-            super.visit(expr, g)
-        }
+            override fun visit(expr: ObjectCreationExpr, g: InterGraph) {
+                g.add(currentSig!!, expr.resolve().qualifiedSignature)
+                super.visit(expr, g)
+            }
 
-        override fun visit(expr: MethodCallExpr, g: InterGraph) {
-            super.visit(expr, g) // Arguments and/or Scope
-            for (sig in chaResolve(expr, classGraph)) {
-                g.add(currentSig!!, sig)
+            override fun visit(expr: MethodCallExpr, g: InterGraph) {
+                super.visit(expr, g) // Arguments and/or Scope
+                for (sig in chaResolve(expr, classGraph)) {
+                    g.add(currentSig!!, sig)
+                }
             }
         }
+        val g = InterGraph()
+        file.accept(fileVisitor, g)
+        return g
     }
-    val g = InterGraph()
-    file.accept(fileVisitor, g)
-    return g
-}
 
-/**
- * Transform for loops into while loops.
- */
-fun transformLoops(file: CompilationUnit) {
-    file.accept(object : VoidVisitorAdapter<Void>() {
-        override fun visit(forStmt: ForStmt, arg: Void?) {
-            // Build while loop
-            val whileStmt = WhileStmt()
-            val whileBody = BlockStmt()
-            whileStmt.body = whileBody
-            whileStmt.condition = forStmt.compare.orElse(BooleanLiteralExpr(true)).clone()
-            whileBody.addStatement(forStmt.body)
-            forStmt.update.forEach { whileBody.addStatement(it) }
-            // Wrap
-            val blockStmt = BlockStmt()
-            forStmt.initialization.forEach { blockStmt.addStatement(it) }
-            blockStmt.addStatement(whileStmt)
-            // Replace
-            forStmt.replace(blockStmt)
-        }
-    }, null)
+    /**
+     * Transform for loops into while loops.
+     */
+    private fun transformLoops(file: CompilationUnit) {
+        file.accept(object : VoidVisitorAdapter<Void>() {
+            override fun visit(forStmt: ForStmt, arg: Void?) {
+                // Build while loop
+                val whileStmt = WhileStmt()
+                val whileBody = BlockStmt()
+                whileStmt.body = whileBody
+                whileStmt.condition = forStmt.compare.orElse(BooleanLiteralExpr(true)).clone()
+                whileBody.addStatement(forStmt.body)
+                forStmt.update.forEach { whileBody.addStatement(it) }
+                // Wrap
+                val blockStmt = BlockStmt()
+                forStmt.initialization.forEach { blockStmt.addStatement(it) }
+                blockStmt.addStatement(whileStmt)
+                // Replace
+                forStmt.replace(blockStmt)
+            }
+        }, null)
+    }
 }
