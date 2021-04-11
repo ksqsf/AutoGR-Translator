@@ -192,29 +192,19 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
  * @param contextualType the type expected by the context
  */
 fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type, tvalues: Map<Int, AbstractValue>): AbstractValue {
-    // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
-    return if (template.startsWith("'")) {
-        if (!template.contains("[["))
-            return AbstractValue.Data(null, null, template.removeSurrounding("'"))
-        val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
-        if (format.startsWith("?")) {
-            tvalues[format.substringAfter("?").toInt()]!!
-        } else {
-            val sep = format.indexOf("|")
-            val exprStr = format.substring(sep + 1)
-            interpreter.lookup(exprStr)?.getKnown()?.cast(contextualType) ?: interpreter.freshArg(exprStr, Type.String)
-        }
-    } else {
-        val format = template.substringAfter("[[").substringBefore("]]")
-        if (format.startsWith("?")) {
-            // [[?n]] indicates this is a filled value with index n.
-            tvalues[format.substringAfter("?").toInt()]!!
-        } else {
-            // Assume format is a NameExpr that refers to a local variable.
-            // If it's `this.field` or `x[...]`, the lookup automatically fails.
-            interpreter.lookup(format)?.get()?.cast(contextualType) ?: interpreter.freshArg("unknown", contextualType)
-        }
+    // 'str'
+    if (!template.contains("[[")) {
+        return AbstractValue.Data(null, null, template.removeSurrounding("'"))
     }
+    val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
+    // [[?n]]
+    if (format.startsWith("?")) {
+        return tvalues[format.substringAfter("?").toInt()]!!
+    }
+    // [[exp]] or [[tag|exp]]
+    val sep = format.indexOf("|")
+    val exprStr = format.substring(sep+1)
+    return interpreter.lookup(exprStr)?.getKnown()?.cast(contextualType) ?: interpreter.freshArg(exprStr, contextualType)
 }
 
 /**
@@ -577,7 +567,7 @@ object SqlGrammar : Grammar<SqlAst>() {
     private val semicol by literalToken(";")
     private val dot by literalToken(".")
     private val asterisk by literalToken("*")
-    private val tliteral by regexToken("\\[\\[[a-zA-Z0-9_]*\\]\\]")
+    private val tliteral by regexToken("\\[\\[[a-zA-Z0-9_]*]]")
     private val tru by literalToken("true")
     private val fal by literalToken("false")
     private val kwUpdate by literalToken("UPDATE")
