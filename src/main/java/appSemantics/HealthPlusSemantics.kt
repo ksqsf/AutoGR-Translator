@@ -359,6 +359,7 @@ fun atomizeInsert(insert: SqlInsert, interpreter: Interpreter, tvalues: Map<Int,
 fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Interpreter, tvalues: Map<Int, AbstractValue>): Map<Column, AbstractValue> {
     val schema = interpreter.schema
     val res = mutableMapOf<Column, AbstractValue>()
+    val locatorCols = mutableSetOf<Column>()
     for (locator in locators) {
         val columnName = locator.column.name
         val columnTable = locator.column.table
@@ -367,8 +368,11 @@ fun convertLocators(locators: List<SqlLocator>, table: Table, interpreter: Inter
         } else {
             schema[columnTable.name]!![columnName]!!
         }
+        locatorCols.add(column)
         res[column] = evalSQLExpr(locator.value, table, interpreter, column.type, tvalues)
     }
+    // Declare locator cols as pkey
+    table.addPKey(locatorCols.filter { it.table == table }.toSet())
     return res
 }
 
