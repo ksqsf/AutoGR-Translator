@@ -1,24 +1,29 @@
 analyzer:
   project_name: HealthPlus
 
-  # Essential
+  # Basic information.
   project_root: /Users/kaima/src/HealthPlus/src/main/java
   schema_files:
     - /Users/kaima/src/HealthPlus/database/hms_db.sql
 
+  # Additional class paths for resolving symbols and types.
+  # If a path ends with /, all jar files under it, and the directory itself, are added.
   additional_class_paths:
     - /Users/kaima/src/HealthPlus/target/dependency/
     - /Users/kaima/src/HealthPlus/target/classes/
 
+  # Used by interprocedural analysis for determining the effectual methods.
   additional_basic_effects:
     - com.hms.hms_test_2.DatabaseOperator.addTableRow
     - com.hms.hms_test_2.DatabaseOperator.deleteTableRow
     - com.hms.hms_test_2.DatabaseOperator.customDeletion
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
 
+  # Used by intraprocedural analysis to find effectual paths.
   additional_basic_updates:
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
 
+  # If a qualified name (a class or a method) can be matched by one of the patterns, it's excluded from analysis.
   exclude_pattern:
     - ^com.hms.hms_test_2.DatabaseOperator
     - ^com.hms.hms_test_2.User
