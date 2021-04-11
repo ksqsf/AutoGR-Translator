@@ -1,10 +1,10 @@
 import com.github.javaparser.ast.expr.Expression
+import com.github.javaparser.resolution.types.ResolvedPrimitiveType
+import com.github.javaparser.resolution.types.ResolvedReferenceType
 import com.github.javaparser.resolution.types.ResolvedType
 import net.sf.jsqlparser.statement.select.Join
 import net.sf.jsqlparser.statement.select.Limit
 import net.sf.jsqlparser.statement.select.PlainSelect
-import java.lang.IllegalArgumentException
-import java.lang.StringBuilder
 
 sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?) {
     override fun toString(): String {
@@ -271,7 +271,12 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         }
 
         override fun toString(): String {
-            return "(data $staticType $data)"
+            val shortType = when (staticType) {
+                is ResolvedPrimitiveType -> staticType.name
+                is ResolvedReferenceType -> staticType.qualifiedName
+                else -> staticType.toString()
+            }
+            return "(data $shortType $data)"
         }
 
         override fun guessSql(): String {

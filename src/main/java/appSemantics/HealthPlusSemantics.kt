@@ -4,14 +4,13 @@ package appSemantics
 
 import AbstractValue
 import AggregateKind
+import Atom
 import Column
-import com.github.javaparser.ast.expr.Expression
-import knownSemantics
 import Interpreter
+import Operator
 import Schema
 import Table
 import Type
-import java.lang.IllegalArgumentException
 import com.github.h0tk3y.betterParse.combinators.*
 import com.github.h0tk3y.betterParse.grammar.Grammar
 import com.github.h0tk3y.betterParse.grammar.parseToEnd
@@ -19,8 +18,8 @@ import com.github.h0tk3y.betterParse.grammar.parser
 import com.github.h0tk3y.betterParse.lexer.literalToken
 import com.github.h0tk3y.betterParse.lexer.regexToken
 import com.github.h0tk3y.betterParse.parser.Parser
-import java.lang.NullPointerException
-import java.lang.RuntimeException
+import com.github.javaparser.ast.expr.Expression
+import knownSemantics
 
 // This file deals with the original HealthPlus code, not the synthetic one.
 //
@@ -191,7 +190,7 @@ fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Typ
     // NOTE: '[[x]]' is guaranteed to be a string, while a naked [[x]] can be any type!
     return if (template.startsWith("'")) {
         if (!template.contains("[["))
-            return AbstractValue.Data(null, null, template)
+            return AbstractValue.Data(null, null, template.removeSurrounding("'"))
         val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
         if (format.startsWith("?")) {
             tvalues[format.substringAfter("?").toInt()]!!
