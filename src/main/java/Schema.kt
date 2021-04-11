@@ -119,6 +119,7 @@ enum class Type {
     String,
     Real,
     Int,
+    Bool,
     Datetime;
 
     fun toRigi(): kotlin.String {
@@ -139,6 +140,9 @@ enum class Type {
             }
             Int -> {
                 return AbstractValue.Data(null, null, 0 to Long)
+            }
+            Bool -> {
+                return AbstractValue.Data(null, null, false to Bool)
             }
             Datetime -> {
                 return AbstractValue.Data(null, null, 0 to Long)
