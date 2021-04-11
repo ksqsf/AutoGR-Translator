@@ -84,19 +84,21 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
     }
 }
 
+typealias Locators = Map<Column, AbstractValue>
+
 // Atom is the unit of DB changes. An effect may contain many atoms.
 sealed class Atom(val table: Table) {
-    class Delete(table: Table, val locators: Map<Column, AbstractValue>): Atom(table) {
+    class Delete(table: Table, val locators: Locators): Atom(table) {
         override fun toString(): String {
             return "(DELETE $table $locators)"
         }
     }
-    class Insert(table: Table, var values: Map<Column, AbstractValue?>): Atom(table) {
+    class Insert(table: Table, var values: Map<Column, AbstractValue>): Atom(table) {
         override fun toString(): String {
             return "(INSERT $table $values)"
         }
     }
-    class Update(table: Table, val locators: Map<Column, AbstractValue>, val values: Map<Column, AbstractValue?>): Atom(table) {
+    class Update(table: Table, val locators: Locators, val values: Map<Column, AbstractValue>): Atom(table) {
         override fun toString(): String {
             return "(UPDATE $table $values $locators)"
         }

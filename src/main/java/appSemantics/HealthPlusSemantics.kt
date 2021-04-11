@@ -289,7 +289,7 @@ fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
 fun atomizeUpdate(update: SqlUpdate, interpreter: Interpreter, tvalues: Map<Int, AbstractValue>): Atom.Update {
     val table = interpreter.schema[update.table.name]!!
     val locators = convertLocators(update.locators, table, interpreter, tvalues)
-    val values = mutableMapOf<Column, AbstractValue?>()
+    val values = mutableMapOf<Column, AbstractValue>()
     if (update.columns == null) {
         for (tableCol in table.columns) {
             // Assume the update doesn't update the indexing key and the primary key itself.

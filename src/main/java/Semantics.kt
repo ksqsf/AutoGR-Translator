@@ -293,8 +293,8 @@ fun castValue(col: Column, value: AbstractValue): AbstractValue {
     }
 }
 
-fun castValues(columnList: List<Column>, valueList: List<AbstractValue>): Map<Column, AbstractValue?> {
-    val result = mutableMapOf<Column, AbstractValue?>()
+fun castValues(columnList: List<Column>, valueList: List<AbstractValue>): Map<Column, AbstractValue> {
+    val result = mutableMapOf<Column, AbstractValue>()
     for ((col, value) in columnList.zip(valueList)) {
         result[col] = castValue(col, value)
     }
