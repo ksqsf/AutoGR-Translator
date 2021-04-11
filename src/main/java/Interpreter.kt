@@ -140,34 +140,8 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             override fun visit(expr: NameExpr, arg: Interpreter): AbstractValue {
                 val varName = expr.nameAsString
                 val variable = lookup(varName)
-                // varName is undefined.
-                if (variable == null) {
-                    val javaType = expr.calculateResolvedType()
-                    val typeStr = javaType.toString()
-                    val type: Type? = if (typeStr.contains("String", ignoreCase = true)) {
-                        Type.String
-                    } else if (typeStr.contains("Double", ignoreCase = true) || typeStr.contains("Float", ignoreCase = true)) {
-                        Type.Real
-                    } else if (typeStr.contains("Date", ignoreCase = true)) {
-                        // effect.addArgv(varName, Type.Int)
-                        // FIXME: Use int for date
-                        Type.Int
-                    } else if (typeStr.contains("Int", ignoreCase = true)) {
-                        Type.Int
-                    } else if (typeStr.contains("Connection", ignoreCase = true)) {
-                        null
-                    } else {
-                        println("[WARN-INT] unknown arg type $typeStr")
-                        null
-                    }
-                    // Free variables are arguments.
-                    if (!effect.argv.contains(varName) && type != null) {
-                        effect.addArgv(varName, type)
-                    }
-                    return AbstractValue.Free(expr, javaType, varName, type)
-                } else {
-                    return variable.get()
-                }
+                return variable?.get() ?: // varName is undefined.
+                AbstractValue.Unknown(expr, expr.calculateResolvedType())
             }
             override fun visit(expr: VariableDeclarator, arg: Interpreter): AbstractValue? {
                 val name = expr.nameAsString
@@ -256,7 +230,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             }
             override fun visit(methodCallExpr: MethodCallExpr, arg: Interpreter): AbstractValue {
                 if (methodCallExpr.scope.isEmpty) {
-                    println("[WARN] don't know how to handle empty scope for $methodCallExpr")
+                    println("[ERR] don't know how to handle empty scope for $methodCallExpr")
                     return AbstractValue.Unknown(methodCallExpr, methodCallExpr.calculateResolvedType())
                 }
 

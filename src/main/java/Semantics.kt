@@ -1,3 +1,4 @@
+@file:Suppress("KDocUnresolvedReference", "UNUSED_PARAMETER")
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.ast.expr.MethodCallExpr
 import com.github.javaparser.ast.stmt.Statement
@@ -337,10 +338,9 @@ fun notNilSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?
         return AbstractValue.Unknown(self, self.calculateResolvedType())
     }
 
-    val receiver = receiver!! as AbstractValue.ResultSet
     assert(receiver.tables.size == 1)
-    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.stmt, receiver.tables[0]!!,
-        whereToLocators(receiver.stmt, receiver.tables[0]!!, receiver.select.where))
+    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.stmt, receiver.tables[0],
+        whereToLocators(receiver.stmt, receiver.tables[0], receiver.select.where))
 }
 
 fun whereToLocators(sql: AbstractValue.SqlStmt, table: Table, where: net.sf.jsqlparser.expression.Expression): Map<Column, AbstractValue> {
