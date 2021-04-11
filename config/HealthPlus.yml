@@ -28,15 +28,15 @@ analyzer:
     - ^com.hms.hms_test_2.AllMessages
     - ^Receptionist.DoctorDetail
     # The following are too slow...
-    # - Receptionist.Receptionist.makeAppointment
+    - Receptionist.Receptionist.makeAppointment
 
   additional_semantics:
     - HealthPlus
 
   debug:
-    build_intergraph: false
-    only_effects:
-      - Doctor.Doctor.updateProfileInfo(java.lang.String)
+    build_intergraph: true
+    only_effects: []
+    #  - Doctor.Doctor.updateProfileInfo(java.lang.String)
 
   # Enable optimizations to improve commutativity?
   opt: false

@@ -11,7 +11,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         return "(Value ${this::class})"
     }
 
-    open fun toRigi(): String {
+    /**
+     * Returns a Python reference (variable name), while the actual computation is emitted to the emitter.
+     */
+    open fun toRigi(emitter: Emitter): String {
         throw IllegalArgumentException("This type ${this::class} can't be converted to Rigi")
     }
 
@@ -159,7 +162,7 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return Unknown(expr, expr?.calculateResolvedType())
         }
 
-        override fun toRigi(): String {
+        override fun toRigi(emitter: Emitter): String {
             println("[WARN] Null toRigi = None")
             return "None"
         }
@@ -287,15 +290,15 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             }
         }
 
-        override fun toRigi(): String {
-            when (data) {
-                is String -> return "StringVal('${quote(data)}')"
-                is Int -> return "$data"
-                is Long -> return "$data"
-                is Double -> return "$data"
-                is Float -> return "$data"
-                is Boolean -> return if (data) { "True" } else { "False" }
-                else -> return super.toRigi()
+        override fun toRigi(emitter: Emitter): String {
+            return when (data) {
+                is String -> "StringVal('${quote(data)}')"
+                is Int -> "$data"
+                is Long -> "$data"
+                is Double -> "$data"
+                is Float -> "$data"
+                is Boolean -> if (data) { "True" } else { "False" }
+                else -> super.toRigi(emitter)
             }
         }
     }
@@ -314,8 +317,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return "?"
         }
 
-        override fun toRigi(): String {
-            return "argv['@OP@']['$name']"
+        override fun toRigi(emitter: Emitter): String {
+            return emitter.emitAssign(name, "argv['@OP@']['$name']")
         }
     }
 
@@ -388,11 +391,13 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return "(db ${column.table.name}.${column.name} $locators)"
         }
 
-//        override fun toRigi(): String {
-//            return "${column.table.name}_${column.name}"
-//        }
+        override fun toRigi(emitter: Emitter): String {
+            if (locators != null) {
+                val name = "${column.table.name}_${column.name}"
+                val value = "state['TABLE_${column.table.name}'].get(${locatorsToRigi(locators, emitter)}, '${column.name}')"
+                return emitter.emitAssign(name, value)
+            }
 
-        override fun toRigi(): String {
             if (query == null) {
                 return "${column.table.name}_${column.name}"
             }
@@ -401,7 +406,7 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             val table = column.table
             // FIXME: remove query argument.
             val locators = locators ?: whereToLocators(query.stmt, table, query.select.where)
-            val locatorStr = locatorsToRigi(locators)
+            val locatorStr = locatorsToRigi(locators, emitter)
             return "state['TABLE_${table.name}'].get($locatorStr, '${column.name}')"
         }
     }
@@ -449,11 +454,11 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return clone
         }
 
-        override fun toRigi(): String {
+        override fun toRigi(emitter: Emitter): String {
             val expect = if (reversed) { "False" } else { "True" }
             val parts = mutableListOf<String>()
             for (locator in locators) {
-                parts.add("'${locator.key.name}': ${locator.value.toRigi()}")
+                parts.add("'${locator.key.name}': ${locator.value.toRigi(emitter)}")
             }
             return "(state['TABLE_${table.name}'].notNil({${parts.joinToString(", ")}}) == $expect)"
 //            val where = query.select.where
@@ -488,10 +493,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return "(invoke $receiver $methodName $args)"
         }
 
-        override fun toRigi(): String {
+        override fun toRigi(emitter: Emitter): String {
             // TODO: actually implement it
             println("[ERR] Call.toRigi: $this")
-            return "True"
+            return "None"
         }
     }
 
@@ -509,8 +514,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             return "($op $value)"
         }
 
-        override fun toRigi(): String {
-            return "$op(${value.toRigi()})"
+        override fun toRigi(emitter: Emitter): String {
+            return "$op(${value.toRigi(emitter)})"
         }
     }
 
@@ -549,8 +554,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             }
         }
 
-        override fun toRigi(): String {
-            return "(${left.toRigi()})$op(${right.toRigi()})"
+        override fun toRigi(emitter: Emitter): String {
+            return "(${left.toRigi(emitter)})$op(${right.toRigi(emitter)})"
         }
     }
 }

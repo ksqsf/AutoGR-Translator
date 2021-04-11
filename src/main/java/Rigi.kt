@@ -1,3 +1,4 @@
+import java.lang.RuntimeException
 import java.lang.StringBuilder
 
 fun generateRigi(appName: String, analyzer: Analyzer, effectMap: Map<QualifiedName, Set<Effect>>): String {
@@ -33,13 +34,11 @@ from Rigi.argvbuilder import *
         self.axiom = ${generateOpAxiomFromUniqueArgv(effectSet)}
 
 """)
-        var cnt = 0
         println("[RIGI] $op")
-        for (effect in effectSet) {
+        for ((cnt, effect) in effectSet.withIndex()) {
             ob.appendLine(generateCond(effect, cnt, analyzer.enableCommute))
             ob.appendLine(generateCondSop(effect, cnt, analyzer.enableCommute))
             ob.appendLine(generateSop(effect, cnt, analyzer.enableCommute))
-            cnt++
         }
         sb.appendLine(ob.toString().replace("@OP@", op))
     }
@@ -135,15 +134,16 @@ fun generateGenArgv(effectMap: Map<QualifiedName, Set<Effect>>, enableCommute: B
 
 fun generateCond(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     println("    [COND] ${effect.pathCondition}")
+    val emitter = Emitter(2)
     fun pathConditionToRigi(pathCondition: MutableList<AbstractValue>): List<String> {
         val result = mutableListOf<String>()
         for (cond in pathCondition) {
             when (cond) {
                 is AbstractValue.DbNotNil -> {
-                    result.add(cond.toRigi())
+                    result.add(cond.toRigi(emitter))
                 }
                 is AbstractValue.Binary -> {
-                    result.add(cond.toRigi())
+                    result.add(cond.toRigi(emitter))
                 }
                 else -> {
                     println("[ERR] unknown cond $cond")
@@ -166,6 +166,7 @@ fun generateCond(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     val sb = StringBuilder()
     sb.append("    def cond$suffix(self, state, argv):\n")
     sb.append(loadArgv(effect, loadNext = true))
+    sb.append(emitter.toString())
     if (result.size == 0) {
         sb.append("        return True\n")
     } else if (result.size == 1) {
@@ -199,6 +200,7 @@ fun generateCondSop(effect: Effect, suffix: Int, enableCommute: Boolean): String
     } else {
 
         val sb = StringBuilder()
+        val emitter = Emitter(2)
         sb.appendLine("    def csop$suffix(self, state, argv):")
         sb.appendLine("        now = argv['@OP@']['now']")
         sb.append(loadArgv(effect))
@@ -209,15 +211,15 @@ fun generateCondSop(effect: Effect, suffix: Int, enableCommute: Boolean): String
             when (sop) {
                 is Atom.Update -> {
                     val table = sop.table
-                    val locatorStr = locatorsToRigi(sop.locators)
+                    val locatorStr = locatorsToRigi(sop.locators, emitter)
                     sb.appendLine("        ${table.name}__ts = state['TABLE_${table.name}'].get($locatorStr, '__ts')")
                     timestamps.add("${table.name}__ts")
                 }
                 is Atom.Insert -> {
-                    sb.append(loadInsertValues(sop))
+                    sb.append(loadInsertValues(sop, emitter))
                     val table = sop.table
                     val validColumns = sop.values.filter {
-                        it.value != null && (it.value !is AbstractValue.Null)
+                        it.value !is AbstractValue.Null
                     }.map { it.key }
                     val firstPKey = table.pkeys[0].intersect(validColumns)
                     val locator = validColumns.filter { firstPKey.contains(it) }.joinToString(",") { "'${it.name}': ${it.qualifiedName}" }
@@ -240,64 +242,29 @@ fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     println("    [SOP]  ${effect.atoms}")
 
     val sb = StringBuilder()
+    val emitter = Emitter(2)
     sb.append("    def sop$suffix(self, state, argv):\n")
 
     // Read arguments
     if (enableCommute) {
         sb.appendLine("        now = argv['@OP@']['now']")
     }
-    sb.append(loadArgv(effect))
+    // sb.append(loadArgv(effect))
 
     // Generate sops
     for (atom in effect.atoms) {
         when (atom) {
             is Atom.Delete -> {
-                sb.append("        state['TABLE_${atom.table.name}'].delete(${locatorsToRigi(atom.locators)})\n")
+                emitter.emitDelete(atom)
+                sb.append(emitter.toString())
             }
             is Atom.Update -> {
-                val table = atom.table
-                val locatorStr = locatorsToRigi(atom.locators)
-                // Read old values
-                for (col in table.columns) {
-                    sb.append("        ${col.qualifiedName} = state['TABLE_${table.name}'].get($locatorStr, '${col.name}')\n")
-                }
-                // Update values
-                for ((col, newValue) in atom.values) {
-                    val newValStr = newValue?.toRigi() ?: col.qualifiedName
-                    sb.append("        ${col.qualifiedName} = $newValStr\n")
-                }
-                // Call update with new values
-                val valueDictStr = table.columns.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(", ")
-                if (!enableCommute) {
-                    sb.append("        state['TABLE_${table.name}'].update($locatorStr, {$valueDictStr})\n")
-                } else {
-                    sb.append("        state['TABLE_${table.name}'].update($locatorStr, {$valueDictStr, '__ts': now})\n")
-                }
+                emitter.emitUpdate(atom)
+                sb.append(emitter.toString())
             }
             is Atom.Insert -> {
-                val table = atom.table
-
-                // RIGI seems to not handle NULL values. Give them default values.
-                atom.values = atom.values.map {
-                    if (it.value == null || it.value is AbstractValue.Null) {
-                        Pair(it.key, it.key.type.defaultValue())
-                    } else {
-                        Pair(it.key, it.value)
-                    }
-                }.toMap()
-
-                sb.append(loadInsertValues(atom))
-
-                val validColumns = atom.values.map { it.key }
-
-                val firstPKey = table.pkeys[0].intersect(validColumns)
-                val locator = validColumns.filter { firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
-                val otherKeys = validColumns.filter { !firstPKey.contains(it) }.map { "'${it.name}': ${it.qualifiedName}" }.joinToString(",")
-                if (!enableCommute) {
-                    sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys})")
-                } else {
-                    sb.appendLine("        state['TABLE_${table.name}'].add({$locator}, {$otherKeys, '__ts': now})")
-                }
+                emitter.emitInsert(atom)
+                sb.append(emitter.toString())
             }
         }
     }
@@ -305,21 +272,21 @@ fun generateSop(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     return sb.toString()
 }
 
-fun loadInsertValues(atom: Atom.Insert): String {
+fun loadInsertValues(atom: Atom.Insert, emitter: Emitter): String {
     val sb = StringBuilder()
     for ((col, value) in atom.values) {
-        if (value == null || value is AbstractValue.Null) {
+        if (value is AbstractValue.Null) {
             println("[DBG] null value $atom")
         } else {
-            sb.append("        ${col.qualifiedName} = ${value!!.toRigi()}\n")
+            sb.append("        ${col.qualifiedName} = ${value.toRigi(emitter)}\n")
         }
     }
     return sb.toString()
 }
 
-fun locatorsToRigi(locators: Map<Column, AbstractValue>): String {
+fun locatorsToRigi(locators: Locators, emitter: Emitter): String {
     val dict = locators.map {
-        "'${it.key.name}': ${it.value.toRigi()}"
+        "'${it.key.name}': ${it.value.toRigi(emitter)}"
     }
     val lb = StringBuilder()
     lb.append("{")
@@ -327,3 +294,104 @@ fun locatorsToRigi(locators: Map<Column, AbstractValue>): String {
     lb.append("}")
     return lb.toString()
 }
+
+class Emitter(val indent: Int) {
+    val sb = StringBuilder()
+    val scope = mutableMapOf<String, String>()
+    val context = EmitContext()
+
+    private fun emitLine(s: String) {
+        sb.appendLine("    ".repeat(indent) + s)
+    }
+
+    private fun mkFresh(x: String): String {
+        var cnt = 1
+        while ("$x$cnt" in scope) {
+            cnt += 1
+        }
+        return "$x$cnt"
+    }
+
+    /**
+     * @return a fresh variable name to avoid naming conflicts.
+     */
+    fun emitAssign(x: String, y: String): String {
+        return when {
+            x !in scope -> {
+                emitLine("$x = $y")
+                x
+            }
+            scope[x] == y -> {
+                x
+            }
+            else -> {
+                val fresh = mkFresh(x)
+                emitLine("$fresh = $y")
+                fresh
+            }
+        }
+    }
+
+    /**
+     * Emit a delete atom at the end of the emitter.
+     */
+    fun emitDelete(delete: Atom.Delete) {
+        emitLine("state[${delete.table.name}].delete(${locatorsToRigi(delete.locators, this)})")
+    }
+
+    /**
+     * Emit an update atom at the end of the emitter.
+     */
+    fun emitUpdate(update: Atom.Update) {
+        context.currentLocators = update.locators
+        val locatorStr = locatorsToRigi(update.locators, this)
+        val valueDictStr = emitDict(update.values)
+        emitLine("state['TABLE_${update.table.name}'].update($locatorStr, $valueDictStr)")
+    }
+
+    /**
+     * Emit an insert atom at the end of the emitter.
+     *
+     * TODO handle NULL values
+     */
+    fun emitInsert(insert: Atom.Insert) {
+        // Find the pkey from filled columns
+        val colsWithValues = insert.values.map { it.key }
+        var pkey: Set<Column>? = null
+        for (k in insert.table.pkeys) {
+            if (k.intersect(colsWithValues).isNotEmpty()) {
+                pkey = k.intersect(colsWithValues)
+                break
+            }
+        }
+        if (pkey == null) {
+            throw RuntimeException("insert doesn't fill in any primary key: $insert")
+        }
+        val pkeyDictStr = emitDict(pkey.associateWith { insert.values[it]!! })
+
+        // Other values
+        val valueDict = insert.values.filter { it.key !in pkey }.toMap()
+        val valueDictStr = emitDict(valueDict)
+
+        emitLine("state['TABLE_${insert.table.name}'].add($pkeyDictStr, $valueDictStr)")
+    }
+
+    /**
+     * @return a python dict string
+     */
+    fun emitDict(values: Map<Column, AbstractValue>): String {
+        val valueDict = mutableListOf<Pair<Column, String>>()
+        for ((c, v) in values) {
+            valueDict.add(Pair(c, emitAssign(c.qualifiedName, v.toRigi(this))))
+        }
+        return "{" + valueDict.joinToString(", ") { "'${it.first.name}': ${it.second}" } + "}"
+    }
+
+    override fun toString(): String {
+        return sb.toString()
+    }
+}
+
+data class EmitContext(
+    var currentLocators: Locators? = null
+)
