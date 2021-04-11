@@ -339,6 +339,7 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         val t: ResolvedType,
         val stmt: SqlStmt,
         val select: PlainSelect,
+        val locators: Locators
     ): AbstractValue(e, t) {
         val columns = mutableListOf<Pair<Column, AggregateKind>>()
         val joins: List<Join>? = select.joins
@@ -382,32 +383,23 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     data class DbState(
         val e: Expression?,
         val t: ResolvedType?,
-        val query: ResultSet?,
         val column: Column,
         val aggregateKind: AggregateKind,
-        val locators: Map<Column, AbstractValue>? = null,
+        val locators: Map<Column, AbstractValue>? = null
     ): AbstractValue(e, t) {
         override fun toString(): String {
             return "(db ${column.table.name}.${column.name} $locators)"
         }
 
         override fun toRigi(emitter: Emitter): String {
-            if (locators != null) {
-                val name = "${column.table.name}_${column.name}"
-                val value = "state['TABLE_${column.table.name}'].get(${locatorsToRigi(locators, emitter)}, '${column.name}')"
-                return emitter.emitAssign(name, value)
-            }
-
-            if (query == null) {
-                return "${column.table.name}_${column.name}"
-            }
-
-            assert(query.tables.size == 1)
-            val table = column.table
-            // FIXME: remove query argument.
-            val locators = locators ?: whereToLocators(query.stmt, table, query.select.where)
-            val locatorStr = locatorsToRigi(locators, emitter)
-            return "state['TABLE_${table.name}'].get($locatorStr, '${column.name}')"
+            val name = "${column.table.name}_${column.name}"
+            // If locators == null, then this DbState refers to the table itself.
+            // UPDATE tbl SET a = a + 1 WHERE ...
+            //                    ^
+            // Assert in this case, the WHERE clause exists.
+            val locatorStr = locatorsToRigi((locators ?: emitter.context.currentLocators)!!, emitter)
+            val value = "state['TABLE_${column.table.name}'].get(${locatorStr}, '${column.name}')"
+            return emitter.emitAssign(name, value)
         }
     }
 
