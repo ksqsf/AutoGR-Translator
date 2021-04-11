@@ -237,6 +237,8 @@ class Analyzer(val cfg: Config) {
         val normalize = { str: String -> quote(str).takeWhile { it != '(' } }
         val subprocesses = mutableListOf<Process>()
         for ((qn, g) in intragraphs) {
+            if (excludes(qn))
+                continue
             println("Visualizing $qn...")
             cnt.putIfAbsent(qn, 0)
             cnt[qn] = cnt[qn]!! + 1
