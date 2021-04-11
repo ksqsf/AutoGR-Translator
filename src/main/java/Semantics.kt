@@ -118,13 +118,13 @@ fun dispatchSemantics(self: Expression, env: Interpreter, receiver: AbstractValu
 fun parseIntSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     if (args.size != 1 || receiver == null)
         return AbstractValue.Call(self, self.calculateResolvedType(), receiver, self.asMethodCallExpr().nameAsString, args)
-    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.I2S, args[0])
+    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.S2I, args[0])
 }
 
 fun integerToStringSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     if (args.size != 1 || receiver == null)
         return AbstractValue.Call(self, self.calculateResolvedType(), receiver, self.asMethodCallExpr().nameAsString, args)
-    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.S2I, args[0])
+    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.I2S, args[0])
 }
 
 fun prepareStatementSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
