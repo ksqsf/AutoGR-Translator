@@ -452,11 +452,13 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         val e: Expression?,
         val t: ResolvedType?,
         val query: Any,
+        val table: Table,
+        val locators: Locators,
         val result: List<DbState>,
-        val knownExisting: Boolean = false, // If true, the DbStateList has been checked to contain a row.
+        val knownExisting: DbNotNil? = null, // If not nil, the DbStateList has been checked to contain a row.
     ): AbstractValue(e, t) {
         override fun toString(): String {
-            return if (knownExisting) {
+            return if (knownExisting != null) {
                 "(resultset! $query)"
             } else {
                 "(resultset $query)"
@@ -467,9 +469,8 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     data class DbNotNil(
         val e: Expression,
         val t: ResolvedType,
-        val stmt: SqlStmt,
         val table: Table,
-        val locators: Map<Column, AbstractValue>,
+        val locators: Locators,
     ): AbstractValue(e, t) {
         var reversed = false
 
@@ -486,7 +487,7 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         }
 
         override fun not(expr: Expression): AbstractValue {
-            val clone = DbNotNil(e, t, stmt, table, locators)
+            val clone = DbNotNil(e, t, table, locators)
             clone.reverse()
             return clone
         }

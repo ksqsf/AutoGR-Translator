@@ -99,9 +99,9 @@ fun evalSqlSelect(sql: SqlSelect, interpreter: Interpreter, tvalues: Map<Int, Ab
     // If sql.columns does not exist, assume it to be *
     val columns = convertColumns(sql.columns ?: listOf(SqlAllColumn), defaultTable, schema, interpreter)
     // Now, for each column create a DbState.
-    return AbstractValue.DbStateList(null, null, sql, columns.map {
-        AbstractValue.DbState(null, null, it.first, it.second, locators)
-    })
+    return AbstractValue.DbStateList(null, null, sql, defaultTable, locators,
+        columns.map { AbstractValue.DbState(null, null, it.first, it.second, locators) }
+    )
 }
 
 /**
@@ -128,8 +128,10 @@ fun arrayListGetSemantics(self: Expression, env: Interpreter, receiver: Abstract
     }
 
     // customSelection(sql).get(i) -> the i-th record in the resultset
-    if (!receiver.knownExisting) {
-        return AbstractValue.DbStateList(receiver.e, receiver.t, receiver.query, receiver.result, true)
+    if (receiver.knownExisting == null) {
+        val cond = AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.table, receiver.locators)
+        return AbstractValue.DbStateList(receiver.e, receiver.t, receiver.query, receiver.table, receiver.locators,
+            receiver.result, cond)
     }
 
     // customSelection(sql).get(i).get(0) -> the first column

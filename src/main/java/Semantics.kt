@@ -242,7 +242,7 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             table.addPKey(locators.keys)
 
             // UPDATE asserts WHERE selects something.
-            env.effect.addCondition(AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver, table, locators))
+            env.effect.addCondition(AbstractValue.DbNotNil(self, self.calculateResolvedType(), table, locators))
             //Consider these locators arguments too.
             for (locator in locators) {
                 env.effect.addArgv(locator.key)
@@ -339,7 +339,7 @@ fun notNilSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?
     }
 
     assert(receiver.tables.size == 1)
-    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.stmt, receiver.tables[0],
+    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.tables[0],
         whereToLocators(receiver.stmt, receiver.tables[0], receiver.select.where))
 }
 
