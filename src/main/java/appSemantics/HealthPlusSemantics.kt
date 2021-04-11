@@ -134,7 +134,12 @@ fun arrayListGetSemantics(self: Expression, env: Interpreter, receiver: Abstract
 
     // customSelection(sql).get(i).get(0) -> the first column
     val idx = (args[0] as AbstractValue.Data).data as Long
-    return receiver.result[idx.toInt()]
+    val value = receiver.result[idx.toInt()]
+    return if (value.type() == Type.Int) {
+        AbstractValue.Unary(null, null, Operator.I2S, value)
+    } else {
+        value
+    }
 }
 
 /**
