@@ -321,6 +321,7 @@ class Emitter(val indent: Int) {
         return when {
             x !in scope -> {
                 emitLine("$x = $y")
+                scope[x] = y
                 x
             }
             scope[x] == y -> {
