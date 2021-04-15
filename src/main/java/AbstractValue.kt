@@ -555,6 +555,16 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         override fun toRigi(emitter: Emitter): String {
             return "$op(${value.toRigi(emitter)})"
         }
+
+        override fun type(): Type? {
+            val innerType = value.type() ?: return null
+            return if (innerType.isIntLike() && op == Operator.I2S)
+                Type.String
+            else if (innerType == Type.String && op == Operator.S2I)
+                Type.Int
+            else
+                super.type()
+        }
     }
 
     data class Binary(
