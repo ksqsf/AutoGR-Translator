@@ -42,7 +42,7 @@ object AnalyzerSpec : ConfigSpec() {
     val excludePattern by optional(listOf<String>())
     val opt by optional(false)
 
-    object Graphviz : ConfigSpec() {
+    object Graphviz: ConfigSpec() {
         object Intragraph : ConfigSpec() {
             val output by optional(false)
         }
@@ -52,9 +52,13 @@ object AnalyzerSpec : ConfigSpec() {
         }
     }
 
-    object Debug : ConfigSpec() {
+    object Debug: ConfigSpec() {
         val buildIntergraph by optional(true)
         val onlyEffects by optional(emptyList<String>())
+    }
+
+    object Patches: ConfigSpec() {
+        val argTypes by optional(mapOf<String, Map<String, String>>())
     }
 }
 

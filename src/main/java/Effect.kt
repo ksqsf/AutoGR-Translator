@@ -58,9 +58,19 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
     }
 
     private fun introduceParameters() {
+        // Workaround: Config-specified types takes precedence. This is needed when inferred types are wrong, or
+        // there's strange type conversion we don't yet support.
+        val curMethodName = sourcePath.intragraph.qualifiedName
+        val patchedTypes = mutableMapOf<String, String>()
+        for ((method, args) in analyzer.cfg[AnalyzerSpec.Patches.argTypes]) {
+            if (curMethodName.startsWith(method, ignoreCase = true)) {
+                patchedTypes += args
+            }
+        }
+
         for (arg in sourcePath.intragraph.methodDecl.parameters) {
             val name = arg.name.asString()
-            val tyStr = arg.typeAsString.toLowerCase()
+            val tyStr = patchedTypes[name] ?: arg.typeAsString.toLowerCase()
             val ty = if (tyStr.contains("string")) {
                 Type.String
             } else if (tyStr.contains("int") || tyStr.contains("long") || tyStr.contains("short")) {

@@ -67,6 +67,7 @@ sealed class Label {
  * Upon union, `return` are always merged. `except` and `break` are usually, but not always, merged.
  */
 class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: MethodDeclaration) {
+    val qualifiedName = methodDecl.resolve().qualifiedName
 
     private fun newId(): Int {
         return IDGen.gen()

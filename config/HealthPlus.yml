@@ -37,6 +37,36 @@ analyzer:
   additional_semantics:
     - HealthPlus
 
+  patches:
+    arg_types:
+      "LabAssistant.LabAssistant.UrineFullReport":
+        ph: float
+      "LabAssistant.LabAssistant.completeBloodCount":
+        haemoglobin: float
+        redBloodCells: float
+        meanCellVolume: float
+        haematocrit: float
+        meanCellHaemoglobin: float
+        mchConcentration: float
+        redCellsDistributionWidth: float
+      "LabAssistant.LabAssistant.RenalFunctionTest":
+        creatinine: float
+        urea: float
+        totalBilirubin: float
+        directBilirubin: float
+        sgotast: float
+        sgptalt: float
+        alkalinePhospates: float
+      "LabAssistant.LabAssistant.liverFunctionTest":
+        totalProtein: float
+        albumin: float
+        globulin: float
+        totalBilirubin: float
+        directBilirubin: float
+        sgotast: float
+        sgptalt: float
+        alkalinePhospates: float
+
   debug:
     build_intergraph: true
     only_effects: []#["Doctor.Doctor.bill(java.lang.String, java.lang.String, java.lang.String)"]
