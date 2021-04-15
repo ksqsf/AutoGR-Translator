@@ -263,15 +263,16 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
                 SqlOperator.GE -> left.ge(null, right)
             }
         }
-        is SqlFunc -> return dispatchSQLFunc(expr.funcName, expr.args)
+        is SqlFunc -> return dispatchSQLFunc(expr.funcName, expr.args, interpreter)
     }
 }
 
 /**
  * Evaluate a [SqlFunc].
  */
-fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>): AbstractValue {
+fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>, env: Interpreter): AbstractValue {
     if (funcName.equals("now", ignoreCase = true)) {
+        env.effect.addArgv("now", Type.Int)
         return AbstractValue.Free(null, null, "now", Type.Int)
     } else {
         throw IllegalArgumentException("Unknown SQL function $funcName")
