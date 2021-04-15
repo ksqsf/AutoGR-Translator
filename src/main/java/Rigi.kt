@@ -339,7 +339,7 @@ class Emitter(val indent: Int) {
      * Emit a delete atom at the end of the emitter.
      */
     fun emitDelete(delete: Atom.Delete) {
-        emitLine("state[${delete.table.name}].delete(${locatorsToRigi(delete.locators, this)})")
+        emitLine("state['TABLE_${delete.table.name}'].delete(${locatorsToRigi(delete.locators, this)})")
     }
 
     /**
