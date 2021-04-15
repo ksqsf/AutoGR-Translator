@@ -335,16 +335,22 @@ class Analyzer(val cfg: Config) {
         val blockVisitor = object : GenericVisitorAdapter<IntraGraph, BlockVisitorArg>() {
             var depth = 0
 
+            fun statementsToGraph(stmts: List<Statement>, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                return if (stmts.isEmpty()) {
+                    g.addEdgeFromEntryToExit()
+                    g
+                } else {
+                    val subG = stmts.map { it.accept(this, arg) }
+                    g.sequence(subG)
+                    g
+                }
+            }
+
             override fun visit(blockStmt: BlockStmt, arg: BlockVisitorArg): IntraGraph {
                 debug(" ".repeat(depth) + ".Find block")
                 depth += 1
-                val g = IntraGraph(arg.classDef, arg.methodDecl)
-                if (blockStmt.childNodes.size == 0) {
-                    g.addEdgeFromEntryToExit()
-                    return g
-                }
-                val subG = blockStmt.statements.map { it.accept(this, arg) }
-                g.sequence(subG)
+                val g = statementsToGraph(blockStmt.statements, arg)
                 depth -= 1
                 return g
             }
@@ -417,6 +423,51 @@ class Analyzer(val cfg: Config) {
                     g.addBetweenEntryAndExit(thenG, Label.Br(cond))
                     g.addEdgeFromEntryToExit(Label.BrNot(cond))
                 }
+                return g
+            }
+
+            override fun visit(switchStmt: SwitchStmt, arg: BlockVisitorArg): IntraGraph {
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                val selector = switchStmt.selector
+                // Create a graph for each statement group.
+                val subG = switchStmt.entries.map {
+                    assert(it.type == SwitchEntry.Type.STATEMENT_GROUP)
+                    statementsToGraph(it.statements, arg)
+                }
+                for ((i, sub) in subG.withIndex()) {
+                    g.union(sub, mergeBreak = false)
+                    // 'break'
+                    g.addEdgeId(sub.breakId, g.exitId)
+                    // fall through
+                    if (i+1 < subG.size)
+                        g.addEdgeId(sub.exitId, subG[i+1].entryId)
+                    else
+                        g.addEdgeId(sub.exitId, g.exitId)
+                }
+                // Create labels
+                var hasDefault = false
+                var prevConds: Expression = BooleanLiteralExpr(true)
+                for ((i, entry) in switchStmt.entries.withIndex()) {
+                    if (entry.labels.isEmpty()) {
+                        // default case must be the final
+                        hasDefault = true
+                        g.addEdgeId(g.entryId, subG[i].entryId, Label.brNot(prevConds))
+                    } else {
+                        var cond = BinaryExpr(selector, entry.labels[0], BinaryExpr.Operator.EQUALS)
+                        for (j in 1 until entry.labels.size) {
+                            val eq = BinaryExpr(selector, entry.labels[j], BinaryExpr.Operator.EQUALS)
+                            cond = BinaryExpr(cond, eq, BinaryExpr.Operator.OR)
+                        }
+                        prevConds = BinaryExpr(prevConds, cond, BinaryExpr.Operator.AND)
+                        g.addEdgeId(g.entryId, subG[i].entryId, Label.br(cond))
+                        cond.setParentNode(switchStmt)
+                    }
+                }
+                // If no default, add an empty one
+                if (!hasDefault) {
+                    g.addEdgeId(g.entryId, g.exitId, Label.brNot(prevConds))
+                }
+                prevConds.setParentNode(switchStmt)
                 return g
             }
 
@@ -626,6 +677,8 @@ class Analyzer(val cfg: Config) {
 
             override fun visit(decl: ClassOrInterfaceDeclaration, g: InterGraph) {
                 currentSig = decl.resolve().qualifiedName
+                if (currentSig != null && excludes(currentSig!!))
+                    return
                 super.visit(decl, g)
             }
 

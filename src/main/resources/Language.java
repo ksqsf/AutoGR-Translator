@@ -136,4 +136,22 @@ public class Language {
         }
         dummy();
     }
+
+    public static void switchStmt(String userType) {
+        String sql = "";
+        switch (userType) {
+            case "doctor":
+                sql = "doctor";
+                break;
+            case "lab_assistant":
+                try {
+                    raise();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+                sql = "lab_assistant";
+                break;
+        }
+        dummy();
+    }
 }

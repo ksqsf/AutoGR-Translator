@@ -8,4 +8,6 @@ analyzer:
       output: false
       onlyEffect: false
     intragraph:
-      output: false
+      output: true
+  debug:
+    build_intergraph: false

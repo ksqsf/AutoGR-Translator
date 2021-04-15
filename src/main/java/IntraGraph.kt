@@ -1,5 +1,6 @@
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration
 import com.github.javaparser.ast.body.MethodDeclaration
+import com.github.javaparser.ast.expr.BooleanLiteralExpr
 import com.github.javaparser.ast.expr.Expression
 import com.github.javaparser.ast.expr.SimpleName
 import com.github.javaparser.ast.stmt.ExpressionStmt
@@ -47,6 +48,25 @@ sealed class Label {
         }
     }
     object Uncaught : Label()
+
+    companion object {
+        // Smart constructors. Handle literal expressions.
+        fun br(expr: Expression): Label {
+            return if (expr == BooleanLiteralExpr(true)) {
+                T
+            } else {
+                Br(expr)
+            }
+        }
+
+        fun brNot(expr: Expression): Label {
+            return if (expr == BooleanLiteralExpr(false)) {
+                T
+            } else {
+                BrNot(expr)
+            }
+        }
+    }
 }
 
 /**
