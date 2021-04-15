@@ -24,10 +24,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
      * Try to cast this value to another type. Returns the same value if it cannot be cast.
      */
     fun cast(toType: Type): AbstractValue {
-        val thisType = this.type()
-        return if (thisType == Type.String && toType == Type.Int) {
+        val thisType = this.type() ?: return this
+        return if (thisType == Type.String && toType.isIntLike()) {
             Unary(null, null, Operator.S2I, this)
-        } else if (thisType == Type.Int && toType == Type.String) {
+        } else if (thisType.isIntLike() && toType == Type.String) {
             Unary(null, null, Operator.I2S, this)
         } else {
             this

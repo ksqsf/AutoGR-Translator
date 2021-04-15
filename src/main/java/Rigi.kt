@@ -385,7 +385,7 @@ class Emitter(val indent: Int) {
     fun emitDict(values: Map<Column, AbstractValue>): String {
         val valueDict = mutableListOf<Pair<Column, String>>()
         for ((c, v) in values) {
-            valueDict.add(Pair(c, emitAssign(c.qualifiedName, v.toRigi(this))))
+            valueDict.add(Pair(c, emitAssign(c.qualifiedName, v.cast(c.type).toRigi(this))))
         }
         return "{" + valueDict.joinToString(", ") { "'${it.first.name}': ${it.second}" } + "}"
     }

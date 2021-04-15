@@ -149,6 +149,13 @@ enum class Type {
             }
         }
     }
+
+    /**
+     * Return true when it's int-like. Currently, int and datetime.
+     */
+    fun isIntLike(): Boolean {
+        return this == Int || this == Datetime
+    }
 }
 
 fun main() {
