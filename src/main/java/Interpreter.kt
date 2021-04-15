@@ -263,6 +263,11 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 }
             }
 
+            // (expr)
+            override fun visit(expr: EnclosedExpr, arg: Interpreter): AbstractValue {
+                return expr.inner.accept(this, arg)!!
+            }
+
             //
             // The following are expressions currently not supported.
             //
@@ -308,10 +313,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 return AbstractValue.Unknown(expr, expr.calculateResolvedType())
             }
             override fun visit(expr: PatternExpr, arg: Interpreter): AbstractValue {
-                println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
-            }
-            override fun visit(expr: EnclosedExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
                 return AbstractValue.Unknown(expr, expr.calculateResolvedType())
             }
