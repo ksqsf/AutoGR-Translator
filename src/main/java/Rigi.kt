@@ -391,7 +391,9 @@ class Emitter(val indent: Int) {
     }
 
     override fun toString(): String {
-        return sb.toString()
+        val res = sb.toString()
+        sb.clear()
+        return res
     }
 }
 
