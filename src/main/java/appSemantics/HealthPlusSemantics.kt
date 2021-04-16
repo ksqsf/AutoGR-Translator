@@ -20,6 +20,7 @@ import com.github.h0tk3y.betterParse.lexer.regexToken
 import com.github.h0tk3y.betterParse.parser.Parser
 import com.github.javaparser.ast.expr.Expression
 import knownSemantics
+import java.lang.Exception
 
 // This file deals with the original HealthPlus code, not the synthetic one.
 //
@@ -58,17 +59,22 @@ fun register() {
  * This function actually used for all kinds of updates, not only insertion.
  */
 fun customInsertionSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
-    val approxSql = approximateSQL(args[0])
-    println("Insertion Approx = $approxSql")
-    val atom = when (val sql = SqlGrammar.parseToEnd(approxSql.template)) {
-        is SqlInsert -> atomizeInsert(sql, env, approxSql.values)
-        is SqlDelete -> atomizeDelete(sql, env, approxSql.values)
-        is SqlUpdate -> atomizeUpdate(sql, env, approxSql.values)
-        else -> throw RuntimeException("Invalid SQL AST class for customInsertion: ${sql::class} of $sql")
+    try {
+        val approxSql = approximateSQL(args[0])
+        println("Insertion Approx = $approxSql")
+        val atom = when (val sql = SqlGrammar.parseToEnd(approxSql.template)) {
+            is SqlInsert -> atomizeInsert(sql, env, approxSql.values)
+            is SqlDelete -> atomizeDelete(sql, env, approxSql.values)
+            is SqlUpdate -> atomizeUpdate(sql, env, approxSql.values)
+            else -> throw RuntimeException("Invalid SQL AST class for customInsertion: ${sql::class} of $sql")
+        }
+        env.effect.addAtom(atom)
+        // Always assume the update is successful.
+        return AbstractValue.Data(null, null, true)
+    } catch (e: Exception) {
+        println("[WARN] Cannot handle $self due to $e, ignoring")
+        return AbstractValue.Unknown(null, null)
     }
-    env.effect.addAtom(atom)
-    // Always assume the update is successful.
-    return AbstractValue.Data(null, null, true)
 }
 
 fun convertColumns(sqlCols: List<SqlColumn>, defaultTable: Table, schema: Schema, interpreter: Interpreter): List<Pair<Column, AggregateKind>> {
