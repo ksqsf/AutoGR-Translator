@@ -481,27 +481,41 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
     fun effectPathsFromEntry(dest: Int): Set<IntraPath> {
         val res = mutableSetOf<IntraPath>()
         val vis = mutableSetOf<Int>()
-        // FIXME: generate two paths forking at loop base
-        fun dfs(cur: Int, path: MutableList<OutEdge>, effect: Boolean) {
+        val loops = collectLoops()
+        // Returns number of viable paths from cur for debugging.
+        // effect: an effect is seen on the path
+        // effectLoop: the loop base id of dest
+        fun dfs(cur: Int, path: MutableList<OutEdge>, effect: Boolean, effectLoop: Int?): Int {
             if (vis.contains(cur))
-                return
+                return 0
             vis.add(cur)
             if (cur == entryId) {
-                if (effect)
+                if (effect) {
                     res.add(IntraPath(path.reversed().toList(), this, dest))
-                return
+                    vis.remove(cur)
+                    return 1
+                }
+                vis.remove(cur)
+                return 0
             }
+            var total = 0
             for (edge in rgraph[cur]!!) {
                 path.add(edge)
-                if (effect) {
-                    dfs(edge.next, path, true)
-                } else {
-                    dfs(edge.next, path, idNode.containsKey(cur) && containsUpdate(idNode[cur]!!.statement))
+                val nextLoop = loops.findBase(edge.next)
+                if (nextLoop == null || nextLoop == effectLoop || nextLoop == edge.next) {
+                    // Entering a new loop. We only admit (1) outermost (no loop) (2) same loop as the effect
+                        // (3) only the loop base node.
+                    total += dfs(edge.next,
+                        path,
+                        effect || idNode.containsKey(cur) && containsUpdate(idNode[cur]!!.statement),
+                        effectLoop)
                 }
                 path.removeLast()
             }
+            vis.remove(cur)
+            return total
         }
-        dfs(dest, mutableListOf(), false)
+        dfs(dest, mutableListOf(), false, loops.findBase(dest))
         return res.toSet()
     }
 
