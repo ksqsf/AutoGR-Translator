@@ -37,6 +37,9 @@ analyzer:
   additional_semantics:
     - HealthPlus
 
+  interesting_exceptions:
+    - SQLException
+
   patches:
     arg_types:
       "LabAssistant.LabAssistant.UrineFullReport":
@@ -68,9 +71,9 @@ analyzer:
         alkalinePhospates: float
 
   debug:
-    build_intergraph: true
-    only_effects: []#["Doctor.Doctor.bill(java.lang.String, java.lang.String, java.lang.String)"]
-    #  - Pharmacist.Pharmacist.reduceStock(int, java.lang.String)
+    build_intergraph: false
+    only_effects: #["Doctor.Doctor.bill(java.lang.String, java.lang.String, java.lang.String)"]
+      - Admin.Admin.createNewUser(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
 
   # Enable optimizations to improve commutativity?
   opt: false
@@ -80,7 +83,7 @@ analyzer:
       output: false
       onlyEffect: true
     intragraph:
-      output: false
+      output: true
 
 rigi:
   generate: true

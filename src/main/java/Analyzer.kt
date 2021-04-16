@@ -41,6 +41,7 @@ object AnalyzerSpec : ConfigSpec() {
     val additionalSemantics by optional(listOf<String>())
     val excludePattern by optional(listOf<String>())
     val opt by optional(false)
+    val interestingExceptions by optional(listOf<String>())
 
     object Graphviz: ConfigSpec() {
         object Intragraph : ConfigSpec() {
@@ -476,10 +477,14 @@ class Analyzer(val cfg: Config) {
                 val g = IntraGraph(arg.classDef, arg.methodDecl)
                 g.addEdgeFromEntry(expressionStmt, depth)
                 g.addEdgeToExit(expressionStmt, depth)
+                val interest = cfg[AnalyzerSpec.interestingExceptions]
                 val exc = expressionStmt.expression.accept(exceptionVisitor, null)
                 if (exc != null) {
                     for (e in exc) {
-                        g.addEdgeToExcept(expressionStmt, depth, Label.Raise(e, expressionStmt.expression))
+                        if (interest.any { e.isReferenceType && e.asReferenceType().qualifiedName.matches(it.toRegex()) }) {
+                            println("[EXC] $e")
+                            g.addEdgeToExcept(expressionStmt, depth, Label.Raise(e, expressionStmt.expression))
+                        }
                     }
                 }
                 return g
