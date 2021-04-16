@@ -603,7 +603,13 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         }
 
         override fun toRigi(emitter: Emitter): String {
-            return "(${left.toRigi(emitter)})$op(${right.toRigi(emitter)})"
+            val leftStr = left.toRigi(emitter)
+            val rightStr = right.toRigi(emitter)
+            return when (op) {
+                Operator.AND -> "($leftStr) and ($rightStr)"
+                Operator.OR -> "($leftStr) or ($rightStr)"
+                else -> "($leftStr)$op($rightStr)"
+            }
         }
     }
 }
