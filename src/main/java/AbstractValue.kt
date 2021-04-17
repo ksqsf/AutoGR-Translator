@@ -12,6 +12,15 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     }
 
     /**
+     * Is local-dependent? Local-dependent <=> it could be referring to local states. Default = true.
+     *
+     * When emitting code, local-dependent values can be replaced by something else.
+     */
+    open fun local(): Boolean {
+        return true
+    }
+
+    /**
      * Try to determine the type of an immediate value, only using information about this value itself.
      *
      * Immediate typed values include: Data, DbState, and Free.
@@ -139,6 +148,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         val e: Expression?,
         val t: ResolvedType?
     ): AbstractValue(e, t) {
+        override fun local(): Boolean {
+            return false
+        }
+
         override fun toString(): String {
             return "(null from $expr)"
         }
@@ -337,6 +350,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
                 else -> null
             }
         }
+
+        override fun local(): Boolean {
+            return false
+        }
     }
 
     // Variable names that occur free
@@ -360,6 +377,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
         override fun type(): Type? {
             return type
+        }
+
+        override fun local(): Boolean {
+            return false
         }
     }
 
@@ -446,6 +467,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
         override fun type(): Type {
             return column.type
         }
+
+        override fun local(): Boolean {
+            return false
+        }
     }
 
     data class DbStateList(
@@ -499,19 +524,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
                 parts.add("'${locator.key.name}': ${locator.value.toRigi(emitter)}")
             }
             return "(state['TABLE_${table.name}'].notNil({${parts.joinToString(", ")}}) == $expect)"
-//            val where = query.select.where
-//            val parts = mutableListOf<String>()
-//            if (where is EqualsTo && where.rightExpression is JdbcParameter) {
-//                val right = where.rightExpression as JdbcParameter
-//                val index = right.index
-//                val value = query.stmt.params[index]!!
-//                val left = where.leftExpression.toString()
-//                assert(!left.contains("."))
-//                parts.add("'$left': ${value.toRigi()}")
-//            } else if (where != null) {
-//                println("[ERR] don't know $where (${where::class})")
-//            }
-//            return "(state['TABLE_${query.tables[0]}'].notNil({${parts.joinToString(", ")}}) == $expect)"
+        }
+
+        override fun local(): Boolean {
+            return false
         }
     }
 
@@ -535,6 +551,17 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
             // TODO: actually implement it
             println("[ERR] Call.toRigi: $this")
             return "None"
+        }
+
+        override fun local(): Boolean {
+            val receiverL = receiver?.local() ?: false
+            if (receiverL)
+                return true
+            for (arg in args) {
+                if (arg.local())
+                    return true
+            }
+            return false
         }
     }
 
@@ -564,6 +591,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
                 Type.Int
             else
                 super.type()
+        }
+
+        override fun local(): Boolean {
+            return value.local()
         }
     }
 
@@ -610,6 +641,10 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
                 Operator.OR -> "($leftStr) or ($rightStr)"
                 else -> "($leftStr)$op($rightStr)"
             }
+        }
+
+        override fun local(): Boolean {
+            return left.local() || right.local()
         }
     }
 }

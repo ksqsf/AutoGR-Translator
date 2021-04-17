@@ -138,6 +138,11 @@ fun generateCond(effect: Effect, suffix: Int, enableCommute: Boolean): String {
     fun pathConditionToRigi(pathCondition: MutableList<AbstractValue>): List<String> {
         val result = mutableListOf<String>()
         for (cond in pathCondition) {
+            if (cond.local()) {
+                // Assume a local-dependent condition always evaluate to true.
+                println("[WARN] local-dependent cond: $cond")
+                continue
+            }
             when (cond) {
                 is AbstractValue.DbNotNil -> {
                     result.add(cond.toRigi(emitter))
@@ -398,5 +403,9 @@ class Emitter(val indent: Int) {
 }
 
 data class EmitContext(
+    /**
+     * When emitting an atom, this points to the locators of the default table. Useful for VarRef.
+     * See [AbstractValue.DbState.toRigi].
+     */
     var currentLocators: Locators? = null
 )
