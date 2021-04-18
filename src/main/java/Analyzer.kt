@@ -268,7 +268,7 @@ class Analyzer(val cfg: Config) {
      */
     fun nontrivialEffects(): List<QualifiedName> {
         val res = mutableListOf<QualifiedName>()
-        for (e in intergraph.effect) {
+        for (e in intergraph.sorted()) {
             if (intragraphs[e] == null)
                 continue
             for (basic in cfg[AnalyzerSpec.additionalBasicEffects]) {

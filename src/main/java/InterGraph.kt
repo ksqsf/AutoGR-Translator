@@ -2,7 +2,7 @@ import java.io.File
 import java.util.*
 
 class InterGraph {
-    private val graph = mutableMapOf< QualifiedName, MutableSet<QualifiedName> > ()
+    private val graph = mutableMapOf<QualifiedName, MutableSet<QualifiedName>>()
     private val rgraph = mutableMapOf<QualifiedName, MutableSet<QualifiedName>>()
     val effect = mutableSetOf<QualifiedName>()
 
@@ -70,5 +70,41 @@ class InterGraph {
         f.writeText("digraph G {\n$s\n}\n")
         val r = Runtime.getRuntime().exec("dot -Tpng /tmp/INTERGRAPH.dot -O")
         r.waitFor()
+    }
+
+    /**
+     * Sort effects topologically: If a() calls b(), then a precedes b in the returned list.
+     *
+     * If the graph is cyclic, it prints a warning, but nevertheless returns a result, as if the call causing the cycle
+     * didn't exist. (Always equals to the reversal of the post-order traversal.) This relaxation allows more workloads
+     * to be analyzed, but can be incorrect for some applications.
+     */
+    fun sorted(): List<QualifiedName> {
+        val res = mutableListOf<QualifiedName>()
+        val outstanding = mutableSetOf<QualifiedName>()
+        val vis = mutableSetOf<QualifiedName>()
+        var acyclic = true
+        fun dfs(cur: QualifiedName): Boolean {
+            if (cur in outstanding)
+                return false
+            outstanding.add(cur)
+            for (next in graph[cur].orEmpty()) {
+                dfs(next)
+            }
+            outstanding.remove(cur)
+            vis.add(cur)
+            res.add(cur)
+            return true
+        }
+        for (eff in effect) {
+            if (eff !in vis) {
+                acyclic = acyclic && dfs(eff)
+            }
+        }
+        if (!acyclic) {
+            println("[CRITICAL] effect call graph is cyclic!")
+        }
+        println(res.reversed())
+        return res.reversed()
     }
 }
