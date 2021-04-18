@@ -104,6 +104,18 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
         interpreter.run(sourcePath)
 
     }
+
+    fun add(rhs: Effect) {
+        for ((name, type) in rhs.argv) {
+            addArgv(name, type)
+        }
+        for (c in rhs.pathCondition) {
+            addCondition(c)
+        }
+        for (a in rhs.atoms) {
+            addAtom(a)
+        }
+    }
 }
 
 typealias Locators = Map<Column, AbstractValue>
