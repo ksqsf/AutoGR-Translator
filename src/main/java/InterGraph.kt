@@ -85,6 +85,8 @@ class InterGraph {
         val vis = mutableSetOf<QualifiedName>()
         var acyclic = true
         fun dfs(cur: QualifiedName): Boolean {
+            if (cur in vis)
+                return true
             if (cur in outstanding)
                 return false
             outstanding.add(cur)
@@ -96,15 +98,13 @@ class InterGraph {
             res.add(cur)
             return true
         }
-        for (eff in effect) {
-            if (eff !in vis) {
-                acyclic = acyclic && dfs(eff)
-            }
+        val zeroIn = effect.filter { rgraph[it]?.isEmpty() ?: true }
+        for (e in zeroIn) {
+            acyclic = acyclic && dfs(e)
         }
         if (!acyclic) {
             println("[CRITICAL] effect call graph is cyclic!")
         }
-        println(res.reversed())
-        return res.reversed()
+        return res
     }
 }
