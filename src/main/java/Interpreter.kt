@@ -229,19 +229,19 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 }
             }
             override fun visit(methodCallExpr: MethodCallExpr, arg: Interpreter): AbstractValue {
-                if (methodCallExpr.scope.isEmpty) {
-                    println("[ERR] don't know how to handle empty scope for $methodCallExpr")
-                    return AbstractValue.Unknown(methodCallExpr, methodCallExpr.calculateResolvedType())
-                }
-
-                val scope = methodCallExpr.scope.get()
-                if (scope !is NameExpr) {
-                    println("[WARN] scope is complex: $methodCallExpr")
-                }
-
-                val receiver = evalExpr(scope)!!
-                val args = methodCallExpr.arguments.map { evalExpr(it)!! }
                 val methodDecl = methodCallExpr.resolve()
+
+                val receiver = if (methodCallExpr.scope.isPresent) {
+                    val scope = methodCallExpr.scope.get()
+                    if (scope !is NameExpr) {
+                        println("[WARN] complex scope: $methodCallExpr")
+                    }
+                    evalExpr(scope)!!
+                } else {
+                    println("[WARN] empty scope: $methodCallExpr")
+                    AbstractValue.Unknown(null, null)
+                }
+                val args = methodCallExpr.arguments.map { evalExpr(it)!! }
 
                 return if (hasSemantics(methodDecl)) {
                     dispatchSemantics(methodCallExpr, arg, receiver, args)
