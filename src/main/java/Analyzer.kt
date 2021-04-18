@@ -1,8 +1,10 @@
 import com.github.javaparser.ParserConfiguration
 import com.github.javaparser.ast.CompilationUnit
+import com.github.javaparser.ast.NodeList
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration
 import com.github.javaparser.ast.body.ConstructorDeclaration
 import com.github.javaparser.ast.body.MethodDeclaration
+import com.github.javaparser.ast.body.VariableDeclarator
 import com.github.javaparser.ast.expr.*
 import com.github.javaparser.ast.stmt.*
 import com.github.javaparser.ast.visitor.GenericVisitorAdapter
@@ -719,6 +721,8 @@ class Analyzer(val cfg: Config) {
      */
     private fun transformLoops(file: CompilationUnit) {
         file.accept(object : VoidVisitorAdapter<Void>() {
+            var cnt = 0 // Number for for each counters
+
             override fun visit(forStmt: ForStmt, arg: Void?) {
                 // Build while loop
                 val whileStmt = WhileStmt()
@@ -733,6 +737,41 @@ class Analyzer(val cfg: Config) {
                 blockStmt.addStatement(whileStmt)
                 // Replace
                 forStmt.replace(blockStmt)
+            }
+
+            // Perform the following translation:
+            // for (x : array) body => for (int tmp1 = 0; tmp1 < array.size; tmp1 += 1) { x = array[tmp1] ; body }
+            override fun visit(forEachStmt: ForEachStmt, arg: Void?) {
+                val array = forEachStmt.iterable
+                // Init
+                cnt++
+                val i = NameExpr("yuck$cnt")  // I hope nobody use this as a counter name
+                val idecl = VariableDeclarator()
+                idecl.setName(i.nameAsString)
+                idecl.setType("int")
+                idecl.setInitializer(IntegerLiteralExpr("0"))
+                val init = VariableDeclarationExpr(idecl)
+                // Cond
+                val compare = BinaryExpr(i.clone(), FieldAccessExpr(array, "length"), BinaryExpr.Operator.LESS)
+                // Update
+                val update = AssignExpr()
+                update.target = i.clone()
+                update.operator = AssignExpr.Operator.ASSIGN
+                update.value = BinaryExpr(i.clone(), IntegerLiteralExpr("1"), BinaryExpr.Operator.PLUS)
+                // Body
+                val xdecl = forEachStmt.variableDeclarator.clone()
+                xdecl.setInitializer(ArrayAccessExpr(array, i))
+                val body = BlockStmt(NodeList(ExpressionStmt(VariableDeclarationExpr(xdecl)), forEachStmt.body))
+                // Construct the equivalent for loop
+                val forStmt = ForStmt()
+                forStmt.initialization = NodeList(init)
+                forStmt.setCompare(compare)
+                forStmt.update = NodeList(update)
+                forStmt.body = body
+                forEachStmt.replace(forStmt)
+                println(forStmt)
+                // Replace
+                visit(forStmt, arg)
             }
         }, null)
     }

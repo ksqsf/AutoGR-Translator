@@ -154,4 +154,10 @@ public class Language {
         }
         dummy();
     }
+
+    public static void forEachStmt(String[] args) {
+        for (String arg : args) {
+            System.out.println(arg);
+        }
+    }
 }
