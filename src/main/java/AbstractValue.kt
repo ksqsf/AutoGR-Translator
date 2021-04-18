@@ -651,6 +651,15 @@ open class AbstractValue(val expr: Expression?) {
         override fun local(): Boolean {
             return left.local() || right.local()
         }
+
+        override fun type(): Type? {
+            val leftT = left.type()
+            val rightT = right.type()
+            return if (leftT != rightT)
+                null
+            else
+                leftT
+        }
     }
 }
 
