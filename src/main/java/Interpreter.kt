@@ -110,30 +110,30 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
         val result = expr.accept(object : GenericVisitorAdapter<AbstractValue?, Interpreter>() {
             // Null
             override fun visit(expr: NullLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Null(expr, expr.calculateResolvedType())
+                return AbstractValue.Null(expr)
             }
 
             // Literals
             override fun visit(expr: StringLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Data(expr, expr.calculateResolvedType(), expr.asString())
+                return AbstractValue.Data(expr, expr.asString())
             }
             override fun visit(expr: BooleanLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Data(expr, expr.calculateResolvedType(), expr.value)
+                return AbstractValue.Data(expr, expr.value)
             }
             override fun visit(expr: CharLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Data(expr, expr.calculateResolvedType(), expr.asChar())
+                return AbstractValue.Data(expr, expr.asChar())
             }
             override fun visit(expr: DoubleLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Data(expr, expr.calculateResolvedType(), expr.asDouble())
+                return AbstractValue.Data(expr, expr.asDouble())
             }
             override fun visit(expr: IntegerLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Data(expr, expr.calculateResolvedType(), expr.asNumber().toLong())
+                return AbstractValue.Data(expr, expr.asNumber().toLong())
             }
             override fun visit(expr: LongLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Data(expr, expr.calculateResolvedType(), expr.asNumber().toLong())
+                return AbstractValue.Data(expr, expr.asNumber().toLong())
             }
             override fun visit(expr: TextBlockLiteralExpr, arg: Interpreter): AbstractValue {
-                return AbstractValue.Data(expr, expr.calculateResolvedType(), expr.asString())
+                return AbstractValue.Data(expr, expr.asString())
             }
 
             // Variable
@@ -141,13 +141,12 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 val varName = expr.nameAsString
                 val variable = lookup(varName)
                 return variable?.get() ?: // varName is undefined.
-                AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                AbstractValue.Unknown(expr)
             }
             override fun visit(expr: VariableDeclarator, arg: Interpreter): AbstractValue? {
                 val name = expr.nameAsString
-                val ty = expr.type.resolve()
                 val value = if (expr.initializer.isEmpty) {
-                    AbstractValue.Null(expr.nameAsExpression, ty)
+                    AbstractValue.Null(expr.nameAsExpression)
                 } else {
                     evalExpr(expr.initializer.get())
                 }
@@ -196,7 +195,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     UnaryExpr.Operator.LOGICAL_COMPLEMENT -> inner.not(expr)
                     else -> {
                         println("[WARN] unary operator ${expr.operator} unsupported")
-                        AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                        AbstractValue.Unknown(expr)
                     }
                 }
             }
@@ -204,7 +203,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 val left = evalExpr(expr.left)!!
                 val right = evalExpr(expr.right)!!
 
-                if (left.staticType.toString().toLowerCase().contains("bool")) {
+                if (left.expr?.calculateResolvedType().toString().toLowerCase().contains("bool")) {
                     println("[WARN] Short-circuit semantics may be ignored")
                 }
 
@@ -224,7 +223,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     BinaryExpr.Operator.AND -> left.and(expr, right)
                     else -> {
                         println("[WARN] binary operator ${expr.operator} unsupported")
-                        AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                        AbstractValue.Unknown(expr)
                     }
                 }
             }
@@ -239,14 +238,14 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                     evalExpr(scope)!!
                 } else {
                     println("[WARN] empty scope: $methodCallExpr")
-                    AbstractValue.Unknown(null, null)
+                    AbstractValue.Unknown(null)
                 }
                 val args = methodCallExpr.arguments.map { evalExpr(it)!! }
 
                 return if (hasSemantics(methodDecl)) {
                     dispatchSemantics(methodCallExpr, arg, receiver, args)
                 } else {
-                    AbstractValue.Call(methodCallExpr, methodCallExpr.calculateResolvedType(), receiver, methodCallExpr.nameAsString, args)
+                    AbstractValue.Call(methodCallExpr, receiver, methodCallExpr.nameAsString, args)
                 }
             }
 
@@ -259,7 +258,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                         evalExpr(conditionalExpr.elseExpr)!!
                     }
                 } else {
-                    return AbstractValue.Unknown(conditionalExpr, conditionalExpr.calculateResolvedType())
+                    return AbstractValue.Unknown(conditionalExpr)
                 }
             }
 
@@ -273,56 +272,55 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             //
             override fun visit(expr: ObjectCreationExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: ArrayAccessExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: ArrayInitializerExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                // Java Symbol Solver is incapable of inferring the array type.
-                return AbstractValue.Unknown(expr, null)
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: ArrayCreationExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: LambdaExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: CastExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: ThisExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: TypeExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: ClassExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: SuperExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: PatternExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: InstanceOfExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
             override fun visit(fieldAccessExpr: FieldAccessExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr, expr.calculateResolvedType())
+                return AbstractValue.Unknown(expr)
             }
         }, this)
         // println("[DBG] Eval $expr = $result")
@@ -424,7 +422,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 val varName = d.nameAsString
                 val init = d.initializer
                 if (init.isEmpty) {
-                    putVariable(varName, AbstractValue.Null(d.nameAsExpression, d.type.resolve()))
+                    putVariable(varName, AbstractValue.Null(d.nameAsExpression))
                 } else {
                     putVariable(varName, evalExpr(init.get())!!)
                 }
@@ -499,7 +497,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 // find a new loop.
                 println("[loop] new loop $loopBase at ${edge.label}")
                 for ((variable, name) in variablesModifiedByLoop(id)) {
-                    variable.set(AbstractValue.Unknown(null, null, tag = name))
+                    variable.set(AbstractValue.Unknown(null, tag = name))
                 }
                 enterLoop = true
             }
@@ -540,9 +538,9 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             var cnt = 1
             while (lookup("$ident$cnt") != null)
                 cnt += 1
-            AbstractValue.Free(null, null, "$ident$cnt", type)
+            AbstractValue.Free(null, "$ident$cnt", type)
         } else {
-            AbstractValue.Free(null, null, ident, type)
+            AbstractValue.Free(null, ident, type)
         }
         putVariable(av.name, av)
         effect.addArgv(av.name, type)

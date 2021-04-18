@@ -133,19 +133,19 @@ enum class Type {
     fun defaultValue(): AbstractValue {
         when (this) {
             String -> {
-                return AbstractValue.Data(null, null, "")
+                return AbstractValue.Data(null, "")
             }
             Real -> {
-                return AbstractValue.Data(null, null, 0.0 to Double)
+                return AbstractValue.Data(null, 0.0 to Double)
             }
             Int -> {
-                return AbstractValue.Data(null, null, 0 to Long)
+                return AbstractValue.Data(null, 0 to Long)
             }
             Bool -> {
-                return AbstractValue.Data(null, null, false to Bool)
+                return AbstractValue.Data(null, false to Bool)
             }
             Datetime -> {
-                return AbstractValue.Data(null, null, 0 to Long)
+                return AbstractValue.Data(null, 0 to Long)
             }
         }
     }

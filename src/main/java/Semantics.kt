@@ -118,14 +118,14 @@ fun dispatchSemantics(self: Expression, env: Interpreter, receiver: AbstractValu
 
 fun parseIntSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     if (args.size != 1 || receiver == null)
-        return AbstractValue.Call(self, self.calculateResolvedType(), receiver, self.asMethodCallExpr().nameAsString, args)
-    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.S2I, args[0])
+        return AbstractValue.Call(self, receiver, self.asMethodCallExpr().nameAsString, args)
+    return AbstractValue.Unary(self, Operator.S2I, args[0])
 }
 
 fun integerToStringSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     if (args.size != 1 || receiver == null)
-        return AbstractValue.Call(self, self.calculateResolvedType(), receiver, self.asMethodCallExpr().nameAsString, args)
-    return AbstractValue.Unary(self, self.calculateResolvedType(), Operator.I2S, args[0])
+        return AbstractValue.Call(self, receiver, self.asMethodCallExpr().nameAsString, args)
+    return AbstractValue.Unary(self, Operator.I2S, args[0])
 }
 
 fun prepareStatementSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
@@ -139,7 +139,7 @@ fun prepareStatementSemantics(self: Expression, env: Interpreter, receiver: Abst
         sqlStrVal.guessSql()
     }
 
-    return AbstractValue.SqlStmt(self, self.calculateResolvedType(), sqlStr)
+    return AbstractValue.SqlStmt(self, sqlStr)
 }
 
 fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
@@ -152,7 +152,7 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
         is Select -> {
             if (sql.selectBody !is PlainSelect) {
                 println("[WARN] don't know $sql")
-                return AbstractValue.Unknown(self, self.calculateResolvedType())
+                return AbstractValue.Unknown(self)
             }
 
             val selectBody = sql.selectBody as PlainSelect
@@ -209,7 +209,7 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
         }
         else -> {
             println("[ERR] Query string is not SELECT")
-            return AbstractValue.Unknown(self, self.calculateResolvedType())
+            return AbstractValue.Unknown(self)
         }
     }
 }
@@ -242,7 +242,7 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
             table.addPKey(locators.keys)
 
             // UPDATE asserts WHERE selects something.
-            env.effect.addCondition(AbstractValue.DbNotNil(self, self.calculateResolvedType(), table, locators))
+            env.effect.addCondition(AbstractValue.DbNotNil(self, table, locators))
             //Consider these locators arguments too.
             for (locator in locators) {
                 env.effect.addArgv(locator.key)
@@ -282,14 +282,14 @@ fun executeUpdateSemantics(self: Expression, env: Interpreter, receiver: Abstrac
         }
     }
 
-    return AbstractValue.Unknown(self, self.calculateResolvedType())
+    return AbstractValue.Unknown(self)
 }
 
 fun castValue(col: Column, value: AbstractValue): AbstractValue {
     if (col.type == Type.Datetime && value is AbstractValue.Data && value.data is String) {
-        return AbstractValue.Data(null, null, parseDateTimeString(value.data))
+        return AbstractValue.Data(null, parseDateTimeString(value.data))
     } else if (col.type == Type.Real && value is AbstractValue.Data && value.data is Long) {
-        return AbstractValue.Data(null, null, value.data.toDouble())
+        return AbstractValue.Data(null, value.data.toDouble())
     } else {
         return value
     }
@@ -308,25 +308,25 @@ fun setParameterSemantics(self: Expression, env: Interpreter, receiver: Abstract
     val idx = (args[0] as AbstractValue.Data).data as Long
     val param = args[1]
     receiver.setParameter(idx.toInt(), param)
-    return AbstractValue.Unknown(self, self.calculateResolvedType())
+    return AbstractValue.Unknown(self)
 }
 
 fun setNullSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     val receiver = receiver!! as AbstractValue.SqlStmt
     val idx = (args[0] as AbstractValue.Data).data as Long
-    receiver.setParameter(idx.toInt(), AbstractValue.Null(self, self.calculateResolvedType())) // FIXME
-    return AbstractValue.Unknown(self, self.calculateResolvedType())
+    receiver.setParameter(idx.toInt(), AbstractValue.Null(self)) // FIXME
+    return AbstractValue.Unknown(self)
 }
 
 fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     if (receiver !is AbstractValue.ResultSet) {
         println("[ERR] resultset was not successfully analyzed")
-        return AbstractValue.Unknown(self, self.calculateResolvedType())
+        return AbstractValue.Unknown(self)
     }
 
     val idx = (args[0] as AbstractValue.Data).data as Long
     val (column, aggKind) = receiver.columns[idx.toInt() - 1]
-    val value = AbstractValue.DbState(self, self.calculateResolvedType(), column, aggKind, receiver.locators)
+    val value = AbstractValue.DbState(self, column, aggKind, receiver.locators)
     val argName = "${column.table.name}_${column.name}"
     env.effect.addArgv(argName, column.type)
     return value
@@ -335,11 +335,12 @@ fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractVal
 fun notNilSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     if (receiver !is AbstractValue.ResultSet) {
         println("[ERR] resultset was not successfully analyzed")
-        return AbstractValue.Unknown(self, self.calculateResolvedType())
+        return AbstractValue.Unknown(self)
     }
 
     assert(receiver.tables.size == 1)
-    return AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.tables[0],
+    return AbstractValue.DbNotNil(self,
+        receiver.tables[0],
         whereToLocators(receiver.stmt, receiver.tables[0], receiver.select.where))
 }
 
@@ -395,22 +396,22 @@ fun collectColumnsFromExpr(expr: net.sf.jsqlparser.expression.Expression?): Set<
 fun evalSqlExpr(expr: net.sf.jsqlparser.expression.Expression, sql: AbstractValue.SqlStmt, table: Table): AbstractValue {
     val exprStr = expr.toString()
     if (exprStr.startsWith("'")) {
-        return AbstractValue.Data(null, null, exprStr.substringAfter("'").substringBefore("'"))
+        return AbstractValue.Data(null, exprStr.substringAfter("'").substringBefore("'"))
     } else if (Regex("\\d+").matches(exprStr)) {
-        return AbstractValue.Data(null, null, exprStr.toInt())
+        return AbstractValue.Data(null, exprStr.toInt())
     } else if (Regex("[nN][oO][wW] *\\( *\\)").matches(exprStr)) {
-        return AbstractValue.Free(null, null, "now", Type.Int)
+        return AbstractValue.Free(null, "now", Type.Int)
     } else if (exprStr.contains("null", ignoreCase = true)) {
-        return AbstractValue.Null(null, null)
+        return AbstractValue.Null(null)
     } else if (exprStr == "?") {
         return sql.params[(expr as JdbcParameter).index]!!
     } else if (exprStr.equals("true", ignoreCase=true)) {
-        return AbstractValue.Data(null, null, true)
+        return AbstractValue.Data(null, true)
     } else if (exprStr.equals("false", ignoreCase=true)) {
-        return AbstractValue.Data(null, null, false)
+        return AbstractValue.Data(null, false)
     } else if (expr is net.sf.jsqlparser.schema.Column) {
         val colName = expr.columnName
-        return AbstractValue.DbState(null, null, table[colName]!!, AggregateKind.ID, null)
+        return AbstractValue.DbState(null, table[colName]!!, AggregateKind.ID, null)
     } else if (expr is Subtraction) {
         val left = evalSqlExpr(expr.leftExpression, sql, table)
         val right = evalSqlExpr(expr.rightExpression, sql, table)

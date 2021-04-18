@@ -81,7 +81,7 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
                 println("[WARN] param $name of unknown type $tyStr")
                 continue
             }
-            val av = AbstractValue.Free(null, null, arg.name.asString(), ty)
+            val av = AbstractValue.Free(null, arg.name.asString(), ty)
             interpreter.putVariable(name, av)
             addArgv(name, ty)
             println("-free ${arg.name.asString()} $ty")

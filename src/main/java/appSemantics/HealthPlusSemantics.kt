@@ -64,7 +64,7 @@ fun refundSemanticsHack(self: Expression, env: Interpreter, receiver: AbstractVa
     println("!!!  " + refundES)
     assert(refundES.size == 1)
     env.effect.add(refundES.first())
-    return AbstractValue.Unknown(null, null)
+    return AbstractValue.Unknown(null)
 }
 
 /**
@@ -84,10 +84,10 @@ fun customInsertionSemantics(self: Expression, env: Interpreter, receiver: Abstr
         }
         env.effect.addAtom(atom)
         // Always assume the update is successful.
-        return AbstractValue.Data(null, null, true)
+        return AbstractValue.Data(null, true)
     } catch (e: Exception) {
         println("[WARN] Cannot handle $self due to $e, ignoring")
-        return AbstractValue.Unknown(null, null)
+        return AbstractValue.Unknown(null)
     }
 }
 
@@ -119,8 +119,11 @@ fun evalSqlSelect(sql: SqlSelect, interpreter: Interpreter, tvalues: Map<Int, Ab
     // If sql.columns does not exist, assume it to be *
     val columns = convertColumns(sql.columns ?: listOf(SqlAllColumn), defaultTable, schema, interpreter)
     // Now, for each column create a DbState.
-    return AbstractValue.DbStateList(null, null, sql, defaultTable, locators,
-        columns.map { AbstractValue.DbState(null, null, it.first, it.second, locators) }
+    return AbstractValue.DbStateList(null,
+        sql,
+        defaultTable,
+        locators,
+        columns.map { AbstractValue.DbState(null, it.first, it.second, locators) }
     )
 }
 
@@ -134,7 +137,7 @@ fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: Abstr
         is SqlSelect -> evalSqlSelect(sql, env, approxSql.values)
         is SqlJoinSelect -> {
             // TODO: implement precise JOIN analysis
-            AbstractValue.Unknown(null, null)
+            AbstractValue.Unknown(null)
         }
         else -> throw RuntimeException("Invalid SQL AST class for customSelection: ${sql::class} of $sql")
     }
@@ -144,7 +147,7 @@ fun customSelectionSemantics(self: Expression, env: Interpreter, receiver: Abstr
 
 fun arrayListGetSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
     if (receiver == null || receiver !is AbstractValue.DbStateList) {
-        return AbstractValue.Unknown(self, self.calculateResolvedType())
+        return AbstractValue.Unknown(self)
     }
 
     // customSelection(sql).get(i) -> the i-th record in the resultset
@@ -162,9 +165,9 @@ fun arrayListGetSemantics(self: Expression, env: Interpreter, receiver: Abstract
             }
         }
         val locators = receiver.locators.filter { locatorOk(it.value) }
-        val cond = AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.table, locators)
-        return AbstractValue.DbStateList(receiver.e, receiver.t, receiver.query, receiver.table, receiver.locators,
-            receiver.result, cond)
+        val cond = AbstractValue.DbNotNil(self, receiver.table, locators)
+        return AbstractValue.DbStateList(receiver.e, receiver.query, receiver.table, receiver.locators, receiver.result,
+            cond)
     }
 
     // customSelection(sql).get(i).get(0) -> the first column
@@ -176,7 +179,7 @@ fun arrayListGetSemantics(self: Expression, env: Interpreter, receiver: Abstract
     val idx = (args[0] as AbstractValue.Data).data as Long
     val value = receiver.result[idx.toInt()]
     return if (value.type() == Type.Int) {
-        AbstractValue.Unary(null, null, Operator.I2S, value)
+        AbstractValue.Unary(null, Operator.I2S, value)
     } else {
         value
     }
@@ -198,7 +201,7 @@ fun addTableRowSemantics(self: Expression, env: Interpreter, receiver: AbstractV
     val insert = Atom.Insert(table, assns)
     env.effect.addAtom(insert)
     // Always assume the insertion is successful.
-    return AbstractValue.Data(null, null, true)
+    return AbstractValue.Data(null, true)
 }
 
 /**
@@ -212,7 +215,7 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
     val value = args[2]
     val delete = Atom.Delete(table, mapOf(column to value))
     env.effect.addAtom(delete)
-    return AbstractValue.Unknown(self, self.calculateResolvedType())
+    return AbstractValue.Unknown(self)
 }
 
 /**
@@ -234,7 +237,7 @@ fun deleteTableRowSemantics(self: Expression, env: Interpreter, receiver: Abstra
 fun evalTemplate(template: String, interpreter: Interpreter, contextualType: Type, tvalues: Map<Int, AbstractValue>): AbstractValue {
     // 'str'
     if (!template.contains("[[")) {
-        return AbstractValue.Data(null, null, template.removeSurrounding("'"))
+        return AbstractValue.Data(null, template.removeSurrounding("'"))
     }
     val format = template.removeSurrounding("'").substringAfter("[[").substringBefore("]]")
     // [[?n]]
@@ -264,10 +267,10 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
         val col = select.columns!![0] as SqlSingleColumn
         // Workaround some bugs in the original code.
         return try {
-            AbstractValue.DbState(null, null, selectTbl[col.name]!!, col.aggregateKind, locators)
+            AbstractValue.DbState(null, selectTbl[col.name]!!, col.aggregateKind, locators)
         } catch (e: NullPointerException) {
             println("[ERR] select table doesn't have ${col.name}, this is likely to be a bug in the original project; expr=$expr")
-            AbstractValue.DbState(null, null, table[col.name]!!, col.aggregateKind, locators)
+            AbstractValue.DbState(null, table[col.name]!!, col.aggregateKind, locators)
         }
     }
 
@@ -276,18 +279,18 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
         is SqlInterpol -> return evalTemplate(expr.value, interpreter, contextualType, tvalues)
         is SqlTemplateValue -> return evalTemplate(expr.tag, interpreter, contextualType, tvalues)
         // Conventional SQL
-        is SqlInt -> return AbstractValue.Data(null, null, expr.value)
-        is SqlBool -> return AbstractValue.Data(null, null, expr.value)
+        is SqlInt -> return AbstractValue.Data(null, expr.value)
+        is SqlBool -> return AbstractValue.Data(null, expr.value)
         is SqlSingleton -> return singletonToDbState(expr.query, interpreter.schema)
         is SqlColRef -> {
             val col = table[expr.column.name]!!
-            return AbstractValue.DbState(null, null, col, expr.column.aggregateKind)
+            return AbstractValue.DbState(null, col, expr.column.aggregateKind)
         }
         is SqlBinary -> {
             val left = evalSQLExpr(expr.left, table, interpreter, Type.Int, tvalues)
             val right = evalSQLExpr(expr.right, table, interpreter, Type.Int, tvalues)
             if (left is AbstractValue.Unknown || right is AbstractValue.Unknown) {
-                return AbstractValue.Unknown(null, null)
+                return AbstractValue.Unknown(null)
             }
             return when (expr.op) {
                 SqlOperator.ADD -> left.add(null, right)
@@ -311,7 +314,7 @@ fun evalSQLExpr(expr: SqlExpr, table: Table, interpreter: Interpreter, contextua
 fun dispatchSQLFunc(funcName: String, args: List<SqlExpr>, env: Interpreter): AbstractValue {
     if (funcName.equals("now", ignoreCase = true)) {
         env.effect.addArgv("now", Type.Int)
-        return AbstractValue.Free(null, null, "now", Type.Int)
+        return AbstractValue.Free(null, "now", Type.Int)
     } else {
         throw IllegalArgumentException("Unknown SQL function $funcName")
     }
