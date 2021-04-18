@@ -92,38 +92,9 @@ fun main() {
     val analyzer = Analyzer(config)
     analyzer.graphviz()
 
-    // Collect effectual paths
-    val effects = if (!config[AnalyzerSpec.Debug.buildIntergraph]) {
-        config[AnalyzerSpec.Debug.onlyEffects]
-    } else {
-        analyzer.nontrivialEffects()
-    }
-
-    // Convert paths to effect triples
-    val effectMap = mutableMapOf<QualifiedName, MutableSet<Effect>>()
-    for (effectMethodSig in effects) {
-        if (analyzer.excludes(effectMethodSig))
-            continue
-        val g = analyzer.intragraphs[effectMethodSig]
-        if (g == null) {
-            println("* No intragraph found for $effectMethodSig")
-            continue
-        }
-        println("* Effectual method $effectMethodSig")
-        val es = g.collectEffectPaths()
-        for ((_, pathSet) in es) {
-            for (path in pathSet) {
-                val effect = Effect(analyzer, path)
-                effect.tryToAnalyze()
-                effectMap.putIfAbsent(effectMethodSig, mutableSetOf())
-                effectMap[effectMethodSig]!!.add(effect)
-            }
-        }
-    }
-
     // Generate RIGI
     if (config[RigiSpec.generate]) {
-        val output = generateRigi(config[AnalyzerSpec.projectName], analyzer, effectMap)
+        val output = generateRigi(config[AnalyzerSpec.projectName], analyzer)
         File(config[RigiSpec.outputFile]).writeText(output)
     }
 }
@@ -133,6 +104,7 @@ class Analyzer(val cfg: Config) {
     val intergraph: InterGraph
     val intragraphs: IntraGraphSet
     val schema = Schema()
+    val effectMap = mutableMapOf<QualifiedName, MutableSet<Effect>>()
 
     private val classLoader: URLClassLoader
 
@@ -223,7 +195,33 @@ class Analyzer(val cfg: Config) {
         }
         Timer.end("intragraph")
 
-        println("Finished")
+        // Step 3. Collect effectual paths
+        val effects = if (!cfg[AnalyzerSpec.Debug.buildIntergraph]) {
+            cfg[AnalyzerSpec.Debug.onlyEffects]
+        } else {
+            nontrivialEffects()
+        }
+
+        // Step 4. Convert paths to effect triples
+        for (effectMethodSig in effects) {
+            if (excludes(effectMethodSig))
+                continue
+            val g = intragraphs[effectMethodSig]
+            if (g == null) {
+                println("* No intragraph found for $effectMethodSig")
+                continue
+            }
+            println("* Effectual method $effectMethodSig")
+            val es = g.collectEffectPaths()
+            for ((_, pathSet) in es) {
+                for (path in pathSet) {
+                    val effect = Effect(this, path)
+                    effect.tryToAnalyze()
+                    effectMap.putIfAbsent(effectMethodSig, mutableSetOf())
+                    effectMap[effectMethodSig]!!.add(effect)
+                }
+            }
+        }
     }
 
     fun graphviz() {

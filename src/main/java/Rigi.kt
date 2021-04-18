@@ -1,7 +1,7 @@
 import java.lang.RuntimeException
 import java.lang.StringBuilder
 
-fun generateRigi(appName: String, analyzer: Analyzer, effectMap: Map<QualifiedName, Set<Effect>>): String {
+fun generateRigi(appName: String, analyzer: Analyzer): String {
     val sb = StringBuilder()
     sb.append("""import sys
 sys.path.append("../../")
@@ -15,7 +15,7 @@ from Rigi.argvbuilder import *
 
 ##############################################################################################""")
 
-    val effectMap = effectMap.map {
+    val effectMap = analyzer.effectMap.map {
         val newName = it.key.substringAfter("procedures.").substringBefore("(").replace(".", "_")
         Pair("Op_"+newName+"_"+IDGen.gen(), it.value)
     }.toMap()
