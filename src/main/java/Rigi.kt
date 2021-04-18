@@ -291,7 +291,7 @@ fun loadInsertValues(atom: Atom.Insert, emitter: Emitter): String {
 
 fun locatorsToRigi(locators: Locators, emitter: Emitter): String {
     val dict = locators.map {
-        "'${it.key.name}': ${it.value.toRigi(emitter)}"
+        "'${it.key.name}': ${it.value.cast(it.key.type).toRigi(emitter)}"
     }
     val lb = StringBuilder()
     lb.append("{")
