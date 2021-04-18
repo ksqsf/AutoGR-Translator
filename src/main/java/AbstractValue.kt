@@ -6,7 +6,7 @@ import net.sf.jsqlparser.statement.select.Join
 import net.sf.jsqlparser.statement.select.Limit
 import net.sf.jsqlparser.statement.select.PlainSelect
 
-sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?) {
+open class AbstractValue(val expr: Expression?) {
     override fun toString(): String {
         return "(Value ${this::class})"
     }

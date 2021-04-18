@@ -22,6 +22,9 @@ analyzer:
   # Used by intraprocedural analysis to find effectual paths.
   additional_basic_updates:
     - com.hms.hms_test_2.DatabaseOperator.customInsertion
+    - com.hms.hms_test_2.DatabaseOperator.customDeletion
+    - com.hms.hms_test_2.DatabaseOperator.addTableRow
+    - com.hms.hms_test_2.DatabaseOperator.deleteTableRow
 
   # If a qualified name (a class or a method) can be matched by one of the patterns, it's excluded from analysis.
   exclude_pattern:
@@ -31,8 +34,6 @@ analyzer:
     - ^com.hms.hms_test_2.Validate
     - ^com.hms.hms_test_2.AllMessages
     - ^Receptionist.DoctorDetail
-    # The following are too slow...
-    - Receptionist.Receptionist.makeAppointment
 
   additional_semantics:
     - HealthPlus
@@ -71,9 +72,8 @@ analyzer:
         alkalinePhospates: float
 
   debug:
-    build_intergraph: false
-    only_effects: #["Doctor.Doctor.bill(java.lang.String, java.lang.String, java.lang.String)"]
-      - Admin.Admin.createNewUser(java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String, java.lang.String)
+    build_intergraph: true
+    only_effects: []
 
   # Enable optimizations to improve commutativity?
   opt: false
@@ -83,7 +83,7 @@ analyzer:
       output: false
       onlyEffect: true
     intragraph:
-      output: true
+      output: false
 
 rigi:
   generate: true

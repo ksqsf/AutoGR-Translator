@@ -5,9 +5,9 @@ analyzer:
   opt: false
   graphviz:
     intergraph:
-      output: false
+      output: true
       onlyEffect: false
     intragraph:
       output: true
   debug:
-    build_intergraph: false
+    build_intergraph: true

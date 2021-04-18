@@ -19,8 +19,10 @@ import com.github.h0tk3y.betterParse.lexer.literalToken
 import com.github.h0tk3y.betterParse.lexer.regexToken
 import com.github.h0tk3y.betterParse.parser.Parser
 import com.github.javaparser.ast.expr.Expression
+import com.github.javaparser.ast.expr.FieldAccessExpr
 import knownSemantics
 import java.lang.Exception
+import java.util.*
 
 // This file deals with the original HealthPlus code, not the synthetic one.
 //
@@ -55,6 +57,13 @@ fun register() {
 
     // HACK
     knownSemantics["Receptionist.Receptionist.refund"] = ::refundSemanticsHack
+
+    // Calendar
+    knownSemantics["java.util.Calendar.getInstance"] = ::calendarGetInstanceSemantics
+    knownSemantics["java.util.Calendar.getTime"] = ::calendarGetTimeSemantics
+    knownSemantics["java.util.Calendar.setTime"] = ::calendarSetTimeSemantics
+    knownSemantics["java.util.Calendar.get"] = ::calendarGetSemantics
+    knownSemantics["java.text.SimpleDateFormat.format"] = ::dateFormatSemantics
 }
 
 fun refundSemanticsHack(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
@@ -743,4 +752,45 @@ object SqlGrammar : Grammar<SqlAst>() {
     }
 
     override val rootParser by (insert or joinSelect or select or update or delete) * -optional(commandEnd)
+}
+
+
+//////////////
+// Calendar //
+//////////////
+data class CalendarState(val e: Expression?) : AbstractValue(e)
+data class DateState(val e: Expression?, val date: AbstractValue) : AbstractValue(e)
+
+fun calendarGetInstanceSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    println("~~~ Calendar getInstance")
+    return CalendarState(self)
+}
+
+fun calendarGetSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    val field = args[0]
+    assert(field is AbstractValue.Unknown && field.e != null && field.e is FieldAccessExpr && field.e.toString() == "Calendar.DAY_OF_WEEK")
+    env.effect.addArgv("__today", Type.Datetime)
+    return AbstractValue.Free(self, "__today", Type.Datetime)
+}
+
+fun calendarGetTimeSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    env.effect.addArgv("now", Type.Datetime)
+    return AbstractValue.Free(self, "now", Type.Datetime)
+}
+
+fun calendarSetTimeSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    val arg = args[0]
+    if (receiver == null || receiver !is DateState || arg !is DateState) {
+        return AbstractValue.Unknown(self)
+    }
+    return DateState(self, arg.date)
+}
+
+fun dateFormatSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    val date = args[0]
+    if (date !is DateState) {
+        return AbstractValue.Unknown(self)
+    }
+    // Pass down the datetime information.
+    return date.cast(Type.String)
 }
