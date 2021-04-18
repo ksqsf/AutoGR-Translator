@@ -515,7 +515,8 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
             vis.remove(cur)
             return total
         }
-        dfs(dest, mutableListOf(), false, loops.findBase(dest))
+        val total = dfs(dest, mutableListOf(), false, loops.findBase(dest))
+        println("[DBG] epath from $dest: $total")
         return res.toSet()
     }
 
@@ -527,15 +528,25 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
         // From each committing node, traverse up to the entry.
         // There can be many paths leading to a committing node,
         // and only effectful ones are collected here.
+        var foundCommitter = false
         for ((id, node) in idNode) {
-            // FIXME: check if a method is committing precisely.
-            // This should include wrappers.
-            // FIXME: Should remove containsUpdate.
-            if (containsCommit(node.statement) || containsUpdate(node.statement)) {
+            if (containsCommit(node.statement)) {
+                foundCommitter = true
                 for (path in effectPathsFromEntry(id)) {
                     paths.putIfAbsent(id, mutableSetOf())
                     paths[id]!!.add(path)
                 }
+            }
+        }
+        // If no committer is found, regard exit/return as committing
+        if (!foundCommitter) {
+            for (path in effectPathsFromEntry(exitId)) {
+                paths.putIfAbsent(exitId, mutableSetOf())
+                paths[exitId]!!.add(path)
+            }
+            for (path in effectPathsFromEntry(returnId)) {
+                paths.putIfAbsent(returnId, mutableSetOf())
+                paths[returnId]!!.add(path)
             }
         }
         return paths.mapValues { it.value.toSet() }.toMap()
