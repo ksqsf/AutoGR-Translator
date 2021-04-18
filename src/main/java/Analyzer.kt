@@ -93,12 +93,9 @@ fun main() {
     analyzer.graphviz()
 
     // Collect effectual paths
-    val effects = if (config[AnalyzerSpec.Debug.onlyEffects].isNotEmpty()) {
+    val effects = if (!config[AnalyzerSpec.Debug.buildIntergraph]) {
         config[AnalyzerSpec.Debug.onlyEffects]
     } else {
-        if (!config[AnalyzerSpec.Debug.buildIntergraph]) {
-            println("[WARN] Intergraph not built, no effects identified")
-        }
         analyzer.nontrivialEffects()
     }
 
@@ -769,7 +766,6 @@ class Analyzer(val cfg: Config) {
                 forStmt.update = NodeList(update)
                 forStmt.body = body
                 forEachStmt.replace(forStmt)
-                println(forStmt)
                 // Replace
                 visit(forStmt, arg)
             }
