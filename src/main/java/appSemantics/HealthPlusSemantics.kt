@@ -52,6 +52,19 @@ fun register() {
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.addTableRow"] = ::addTableRowSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.deleteTableRow"] = ::deleteTableRowSemantics
     knownSemantics["java.util.ArrayList.get"] = ::arrayListGetSemantics
+
+    // HACK
+    knownSemantics["Receptionist.Receptionist.refund"] = ::refundSemanticsHack
+}
+
+fun refundSemanticsHack(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    // Some methods, Receptionist.Receptionist.cancelLabAppointment, calls refund.
+    // Toposort guarantees refund() has been analyzed.
+    val refundES = env.effect.analyzer.effectMap["Receptionist.Receptionist.refund(java.lang.String)"]!!
+    println("!!!  " + refundES)
+    assert(refundES.size == 1)
+    env.effect.add(refundES.first())
+    return AbstractValue.Unknown(null, null)
 }
 
 /**
