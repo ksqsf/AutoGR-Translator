@@ -35,6 +35,12 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
     fun cast(toType: Type): AbstractValue {
         val thisType = this.type() ?: return this
         return if (thisType == Type.String && toType.isIntLike()) {
+            // Trim the string literals so that they won't confuse Z3.
+            val dest = if (this is Data) {
+                this.trim()
+            } else {
+                this
+            }
             Unary(null, Operator.S2I, dest)
         } else if (thisType.isIntLike() && toType == Type.String) {
             Unary(null, Operator.I2S, this)
@@ -349,6 +355,18 @@ sealed class AbstractValue(val expr : Expression?, val staticType: ResolvedType?
 
         override fun local(): Boolean {
             return false
+        }
+
+        /**
+         * Remove whitespaces before and after string literals. Does nothing for other types of data.
+         */
+        fun trim(): Data {
+            return if (data is String) {
+                Data(e, data.trim())
+            } else {
+                // create a new Data?
+                this
+            }
         }
     }
 
