@@ -63,6 +63,7 @@ fun register() {
     knownSemantics["java.util.Calendar.getTime"] = ::calendarGetTimeSemantics
     knownSemantics["java.util.Calendar.setTime"] = ::calendarSetTimeSemantics
     knownSemantics["java.util.Calendar.get"] = ::calendarGetSemantics
+    knownSemantics["java.util.Calendar.add"] = ::calendarAddSemantics
     knownSemantics["java.text.SimpleDateFormat.format"] = ::dateFormatSemantics
 }
 
@@ -759,10 +760,9 @@ object SqlGrammar : Grammar<SqlAst>() {
 // Calendar //
 //////////////
 data class CalendarState(val e: Expression?) : AbstractValue(e)
-data class DateState(val e: Expression?, val date: AbstractValue) : AbstractValue(e)
+data class DateState(val e: Expression?, var date: AbstractValue) : AbstractValue(e)
 
 fun calendarGetInstanceSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
-    println("~~~ Calendar getInstance")
     return CalendarState(self)
 }
 
@@ -784,6 +784,16 @@ fun calendarSetTimeSemantics(self: Expression, env: Interpreter, receiver: Abstr
         return AbstractValue.Unknown(self)
     }
     return DateState(self, arg.date)
+}
+
+fun calendarAddSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    val field = args[0]
+    val delta = args[1]
+    if (receiver == null || receiver !is DateState)
+        return AbstractValue.Unknown(self)
+    assert(field is AbstractValue.Unknown && field.e.toString() == "Calendar.DATE")
+    receiver.date = receiver.date.add(self, delta)
+    return AbstractValue.Unknown(self)
 }
 
 fun dateFormatSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
