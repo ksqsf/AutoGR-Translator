@@ -135,12 +135,30 @@ fun arrayListGetSemantics(self: Expression, env: Interpreter, receiver: Abstract
 
     // customSelection(sql).get(i) -> the i-th record in the resultset
     if (receiver.knownExisting == null) {
-        val cond = AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.table, receiver.locators)
+        fun locatorOk(v: AbstractValue): Boolean {
+            when (v) {
+                is AbstractValue.DbState -> {
+                    if (v.aggregateKind == AggregateKind.MAX)
+                        return false
+                    if (v.locators?.isEmpty() == true)
+                        return false
+                    return true
+                }
+                else -> return true
+            }
+        }
+        val locators = receiver.locators.filter { locatorOk(it.value) }
+        val cond = AbstractValue.DbNotNil(self, self.calculateResolvedType(), receiver.table, locators)
         return AbstractValue.DbStateList(receiver.e, receiver.t, receiver.query, receiver.table, receiver.locators,
             receiver.result, cond)
     }
 
     // customSelection(sql).get(i).get(0) -> the first column
+    // assert this row exists
+    if (receiver.knownExisting.locators.isNotEmpty()) {
+        env.effect.addCondition(receiver.knownExisting)
+    }
+    // return the dbstate
     val idx = (args[0] as AbstractValue.Data).data as Long
     val value = receiver.result[idx.toInt()]
     return if (value.type() == Type.Int) {
