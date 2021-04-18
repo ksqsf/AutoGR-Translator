@@ -47,6 +47,7 @@ import java.lang.Exception
 @Suppress("unused")
 fun register() {
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.customInsertion"] = ::customInsertionSemantics
+    knownSemantics["com.hms.hms_test_2.DatabaseOperator.customDeletion"] = ::customInsertionSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.customSelection"] = ::customSelectionSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.addTableRow"] = ::addTableRowSemantics
     knownSemantics["com.hms.hms_test_2.DatabaseOperator.deleteTableRow"] = ::deleteTableRowSemantics
@@ -613,6 +614,7 @@ object SqlGrammar : Grammar<SqlAst>() {
     private val kwInner by literalToken("INNER")
     private val kwJoin by literalToken("JOIN")
     private val kwOn by literalToken("ON")
+    private val kwLimit by literalToken("LIMIT")
     private val num by regexToken("-?\\d+")
     private val ident by regexToken("\\w+")
     private val string by regexToken("'[^']*'")
@@ -682,6 +684,7 @@ object SqlGrammar : Grammar<SqlAst>() {
     private val assignmentList by separated(assignment, comma) use { this.terms }
     private val locator by columnName * op * expr use { SqlLocator(t1, t2, t3) }
     private val locators by separated(locator, kwAnd) use { this.terms }
+    private val limit by kwLimit * expr
 
     // Workaround for Admin.Admin.updateAccountInfo
     private val commandEnd by optional(rpar) and semicol
@@ -719,7 +722,7 @@ object SqlGrammar : Grammar<SqlAst>() {
         }
         SqlUpdate(it.t1, columns, it.t3)
     }
-    private val delete by -kwDelete * -kwFrom * tableName * -kwWhere * locators map {
+    private val delete by -kwDelete * -kwFrom * tableName * -kwWhere * locators * optional(limit) map {
         SqlDelete(it.t1, it.t2)
     }
 
