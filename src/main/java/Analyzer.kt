@@ -83,9 +83,10 @@ fun main() {
     // Register additional semantics.
     // For each additional semantics X, call `appSemantics.XSemanticsKt.register()`.
     for (semantics in config[AnalyzerSpec.additionalSemantics]) {
-        val semanticsClass = Class.forName("appSemantics.${semantics}SemanticsKt")
+        val semanticsClass = Class.forName("appSemantics.${semantics}Semantics")
+        val semanticsObj = semanticsClass.getDeclaredConstructor().newInstance()
         val register = semanticsClass.getMethod("register")
-        register(null)
+        register(semanticsObj)
     }
 
     // Start the analyzer

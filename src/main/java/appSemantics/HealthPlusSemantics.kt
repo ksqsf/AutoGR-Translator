@@ -47,24 +47,26 @@ import java.util.*
 // Anyway, this is a pretty ad hoc strategy, and the relevant code is only put here.
 
 @Suppress("unused")
-fun register() {
-    knownSemantics["com.hms.hms_test_2.DatabaseOperator.customInsertion"] = ::customInsertionSemantics
-    knownSemantics["com.hms.hms_test_2.DatabaseOperator.customDeletion"] = ::customInsertionSemantics
-    knownSemantics["com.hms.hms_test_2.DatabaseOperator.customSelection"] = ::customSelectionSemantics
-    knownSemantics["com.hms.hms_test_2.DatabaseOperator.addTableRow"] = ::addTableRowSemantics
-    knownSemantics["com.hms.hms_test_2.DatabaseOperator.deleteTableRow"] = ::deleteTableRowSemantics
-    knownSemantics["java.util.ArrayList.get"] = ::arrayListGetSemantics
+class HealthPlusSemantics {
+    private fun register() {
+        knownSemantics["com.hms.hms_test_2.DatabaseOperator.customInsertion"] = ::customInsertionSemantics
+        knownSemantics["com.hms.hms_test_2.DatabaseOperator.customDeletion"] = ::customInsertionSemantics
+        knownSemantics["com.hms.hms_test_2.DatabaseOperator.customSelection"] = ::customSelectionSemantics
+        knownSemantics["com.hms.hms_test_2.DatabaseOperator.addTableRow"] = ::addTableRowSemantics
+        knownSemantics["com.hms.hms_test_2.DatabaseOperator.deleteTableRow"] = ::deleteTableRowSemantics
+        knownSemantics["java.util.ArrayList.get"] = ::arrayListGetSemantics
 
-    // HACK
-    knownSemantics["Receptionist.Receptionist.refund"] = ::refundSemanticsHack
+        // HACK
+        knownSemantics["Receptionist.Receptionist.refund"] = ::refundSemanticsHack
 
-    // Calendar
-    knownSemantics["java.util.Calendar.getInstance"] = ::calendarGetInstanceSemantics
-    knownSemantics["java.util.Calendar.getTime"] = ::calendarGetTimeSemantics
-    knownSemantics["java.util.Calendar.setTime"] = ::calendarSetTimeSemantics
-    knownSemantics["java.util.Calendar.get"] = ::calendarGetSemantics
-    knownSemantics["java.util.Calendar.add"] = ::calendarAddSemantics
-    knownSemantics["java.text.SimpleDateFormat.format"] = ::dateFormatSemantics
+        // Calendar
+        knownSemantics["java.util.Calendar.getInstance"] = ::calendarGetInstanceSemantics
+        knownSemantics["java.util.Calendar.getTime"] = ::calendarGetTimeSemantics
+        knownSemantics["java.util.Calendar.setTime"] = ::calendarSetTimeSemantics
+        knownSemantics["java.util.Calendar.get"] = ::calendarGetSemantics
+        knownSemantics["java.util.Calendar.add"] = ::calendarAddSemantics
+        knownSemantics["java.text.SimpleDateFormat.format"] = ::dateFormatSemantics
+    }
 }
 
 fun refundSemanticsHack(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
