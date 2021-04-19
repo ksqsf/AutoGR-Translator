@@ -538,6 +538,13 @@ class Analyzer(val cfg: Config) {
                 return g
             }
 
+            override fun visit(assertStmt: AssertStmt, arg: BlockVisitorArg): IntraGraph {
+                // FIXME: should this be a no-op or contains condition?
+                val g = IntraGraph(arg.classDef, arg.methodDecl)
+                g.addEdgeFromEntryToExit()
+                return g
+            }
+
             override fun visit(emptyStmt: EmptyStmt, arg: BlockVisitorArg): IntraGraph {
                 val g = IntraGraph(arg.classDef, arg.methodDecl)
                 g.addEdgeFromEntryToExit()
