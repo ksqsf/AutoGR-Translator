@@ -1,9 +1,13 @@
 analyzer:
+  project_name: HealthPlus
   project_root: /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/procedures
   schema_files:
     - /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/healthplus/ddls/healthplus-ddl.sql
   opt: false
+  additional_class_paths:
+    - /Users/kaima/src/oltpbenchmark/build/
+    - /Users/kaima/src/oltpbenchmark/
 
 rigi:
   generate: true
-  output_file: /tmp/output.py
+  output_file: /tmp/healthplussynth.py
