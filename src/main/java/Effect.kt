@@ -116,6 +116,13 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
             addAtom(a)
         }
     }
+
+    /**
+     * Abandon the analysis of this effect immediately. Under the hood, an exception is thrown.
+     */
+    fun abandon() {
+        throw AbandonEffect()
+    }
 }
 
 typealias Locators = Map<Column, AbstractValue>
@@ -138,3 +145,5 @@ sealed class Atom(val table: Table) {
         }
     }
 }
+
+class AbandonEffect: Exception()

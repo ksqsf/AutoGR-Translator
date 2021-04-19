@@ -325,6 +325,10 @@ fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractVal
     }
 
     val idx = (args[0] as AbstractValue.Data).data as Long
+    if (idx.toInt() < 1 || idx.toInt() > receiver.columns.size) {
+        println("[CRIT] Attempt to get a non-existent column, abandoning this effect")
+        env.effect.abandon()
+    }
     val (column, aggKind) = receiver.columns[idx.toInt() - 1]
     val value = AbstractValue.DbState(self, column, aggKind, receiver.locators)
     val argName = "${column.table.name}_${column.name}"
