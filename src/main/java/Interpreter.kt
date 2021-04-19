@@ -188,11 +188,50 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
 
             // Arithmetics
             override fun visit(expr: UnaryExpr, arg: Interpreter): AbstractValue {
-                val inner = evalExpr(expr.expression)!!
+                val innerE = expr.expression
+                val inner = evalExpr(innerE)!!
                 return when (expr.operator) {
                     UnaryExpr.Operator.PLUS -> inner
                     UnaryExpr.Operator.MINUS -> inner.negate(expr)
                     UnaryExpr.Operator.LOGICAL_COMPLEMENT -> inner.not(expr)
+                    UnaryExpr.Operator.POSTFIX_INCREMENT -> {
+                        return if (innerE is NameExpr) {
+                            arg.lookup(innerE.nameAsString)?.set(inner.add(null, AbstractValue.from(1L)))
+                            inner
+                        } else {
+                            println("[WARN] cannot handle ${expr.expression} ++")
+                            AbstractValue.Unknown(expr)
+                        }
+                    }
+                    UnaryExpr.Operator.POSTFIX_DECREMENT -> {
+                        return if (innerE is NameExpr) {
+                            arg.lookup(innerE.nameAsString)?.set(inner.sub(null, AbstractValue.from(1L)))
+                            inner
+                        } else {
+                            println("[WARN] cannot handle ${expr.expression} ++")
+                            AbstractValue.Unknown(expr)
+                        }
+                    }
+                    UnaryExpr.Operator.PREFIX_INCREMENT -> {
+                        val new = inner.add(null, AbstractValue.from(1L))
+                        return if (innerE is NameExpr) {
+                            arg.lookup(innerE.nameAsString)?.set(new)
+                            return new
+                        } else {
+                            println("[WARN] cannot handle ${expr.expression} ++")
+                            AbstractValue.Unknown(expr)
+                        }
+                    }
+                    UnaryExpr.Operator.PREFIX_DECREMENT -> {
+                        val new = inner.sub(null, AbstractValue.from(1L))
+                        return if (innerE is NameExpr) {
+                            arg.lookup(innerE.nameAsString)?.set(new)
+                            return new
+                        } else {
+                            println("[WARN] cannot handle ${expr.expression} ++")
+                            AbstractValue.Unknown(expr)
+                        }
+                    }
                     else -> {
                         println("[WARN] unary operator ${expr.operator} unsupported")
                         AbstractValue.Unknown(expr)

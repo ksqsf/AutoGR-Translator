@@ -7,6 +7,13 @@ import net.sf.jsqlparser.statement.select.Limit
 import net.sf.jsqlparser.statement.select.PlainSelect
 
 open class AbstractValue(val expr: Expression?) {
+    companion object {
+        fun from(data: Any): AbstractValue {
+            return Data(null, data)
+        }
+    }
+
+
     override fun toString(): String {
         return "(Value ${this::class})"
     }
