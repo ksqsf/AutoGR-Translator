@@ -78,7 +78,7 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
 
         for (arg in sourcePath.intragraph.methodDecl.parameters) {
             val name = arg.name.asString()
-            val camel = name.toCamelCase()
+            val camel = name.toCamelCase()  // Workaround a konf problem
 
             // Check if the parameter is in the unfold matrix.
             if (camel in unfoldArgs) {

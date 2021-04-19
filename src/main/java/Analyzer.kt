@@ -73,8 +73,8 @@ object RigiSpec : ConfigSpec() {
     val outputFile by required<String>()
 }
 
-fun main() {
-    val defaultConfigFile = "/Users/kaima/src/translator/config/HealthPlus.yml"
+fun main(args: Array<String>) {
+    val defaultConfigFile = args[0]
     val config = Config { addSpec(AnalyzerSpec); addSpec(RigiSpec) }
         .from.yaml.file(defaultConfigFile)
 

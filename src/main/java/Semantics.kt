@@ -143,9 +143,11 @@ fun prepareStatementSemantics(self: Expression, env: Interpreter, receiver: Abst
 }
 
 fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
+    if (receiver !is AbstractValue.SqlStmt) {
+        println("[CRIT] can't figure out SQL for executeQuery: $self")
+        return AbstractValue.Unknown(self)
+    }
     // Receiver is a prepared statement.
-    assert(receiver is AbstractValue.SqlStmt)
-    val receiver = receiver as AbstractValue.SqlStmt
     val sqlStr = receiver.sql
     val sql = CCJSqlParserUtil.parse(sqlStr)
     when (sql) {
@@ -159,36 +161,58 @@ fun executeQuerySemantics(self: Expression, env: Interpreter, receiver: Abstract
             val where = selectBody.where
             val items = selectBody.selectItems
             val tables = TablesNamesFinder().getTableList(sql)
+            if (tables.size != 1) {
+                return AbstractValue.Unknown(self)
+            }
             val locators = whereToLocators(receiver, env.schema[tables[0]]!!, selectBody.where)
 
             val rs = AbstractValue.ResultSet(self, self.calculateResolvedType(), receiver, selectBody, locators)
             rs.tables = tables.map { env.schema[it]!! }.toList()
 
             // Collect columns
-            if (items.size == 1) {
-                assert(tables.size == 1)
-                if (items[0].toString() == "*") {
-                    for (item in env.schema.get(tables[0]!!)!!.columns) {
-                        rs.addColumn(item)
-                    }
-                } else if (items[0].toString().contains("(")) {
-                    // FIXME: only case in HealthPlus is SELECT MAX(bill_id) FROM bill
-                    assert(items[0].toString().substringBefore('(') == "MAX")
-                    val colName = items[0].toString().substringAfter('(').substringBefore(')')
-                    assert(colName == "bill_id")
-                    val col = env.schema.get(tables[0]!!)!!.get(colName)!!
-                    rs.addAggregate(col, AggregateKind.MAX)
+            val defaultTable = tables[0]
+            for (item in items) {
+                val itemStr = item.toString()
+                assert("(" !in itemStr)
+                val (tableStr, columnStr) = if (itemStr.contains(".")) {
+                    itemStr.split(".")
                 } else {
-                    val col = env.schema.get(tables[0])!!.get(items[0].toString())!!
-                    rs.addColumn(col)
+                    listOf(defaultTable, itemStr)
                 }
-            } else {
-                for (item in items) {
-                    val (tableName, colName) = item.toString().split(".")
-                    val column = env.schema.get(tableName)!!.get(colName)!!
+                val table = env.schema[tableStr]!!
+                if (columnStr != "*") {
+                    val column = table[columnStr]!!
                     rs.addColumn(column)
+                } else {
+                    for (column in table.columns) {
+                        rs.addColumn(column)
+                    }
                 }
             }
+//            if (items.size == 1) {
+//                assert(tables.size == 1)
+//                if (items[0].toString() == "*") {
+//                    for (item in env.schema.get(tables[0]!!)!!.columns) {
+//                        rs.addColumn(item)
+//                    }
+//                } else if (items[0].toString().contains("(")) {
+//                    // FIXME: only case in HealthPlus is SELECT MAX(bill_id) FROM bill
+//                    assert(items[0].toString().substringBefore('(') == "MAX")
+//                    val colName = items[0].toString().substringAfter('(').substringBefore(')')
+//                    assert(colName == "bill_id")
+//                    val col = env.schema.get(tables[0]!!)!!.get(colName)!!
+//                    rs.addAggregate(col, AggregateKind.MAX)
+//                } else {
+//                    val col = env.schema.get(tables[0])!!.get(items[0].toString())!!
+//                    rs.addColumn(col)
+//                }
+//            } else {
+//                for (item in items) {
+//                    val (tableName, colName) = item.toString().split(".")
+//                    val column = env.schema.get(tableName)!!.get(colName)!!
+//                    rs.addColumn(column)
+//                }
+//            }
 
             // Collect indexers
             val table = env.schema.get(selectBody.fromItem.toString())!!
@@ -326,7 +350,7 @@ fun getColumnSemantics(self: Expression, env: Interpreter, receiver: AbstractVal
 
     val idx = (args[0] as AbstractValue.Data).data as Long
     if (idx.toInt() < 1 || idx.toInt() > receiver.columns.size) {
-        println("[CRIT] Attempt to get a non-existent column, abandoning this effect")
+        println("[WARN] Attempt to get a non-existent column, abandoning this effect")
         env.effect.abandon()
     }
     val (column, aggKind) = receiver.columns[idx.toInt() - 1]
@@ -408,7 +432,7 @@ fun evalSqlExpr(expr: net.sf.jsqlparser.expression.Expression, sql: AbstractValu
     } else if (exprStr.contains("null", ignoreCase = true)) {
         return AbstractValue.Null(null)
     } else if (exprStr == "?") {
-        return sql.params[(expr as JdbcParameter).index]!!
+        return sql.params.getOrDefault((expr as JdbcParameter).index, AbstractValue.Unknown(null))
     } else if (exprStr.equals("true", ignoreCase=true)) {
         return AbstractValue.Data(null, true)
     } else if (exprStr.equals("false", ignoreCase=true)) {

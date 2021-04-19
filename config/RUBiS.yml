@@ -1,0 +1,15 @@
+analyzer:
+  project_name: Rubis
+  project_root: /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/auctionmark/procedures
+  schema_files:
+    - /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/auctionmark/ddls/auctionmark-ddl.sql
+  opt: false
+  additional_class_paths:
+    - /Users/kaima/src/oltpbenchmark/build/
+    - /Users/kaima/src/oltpbenchmark/lib/
+  additional_semantics:
+    - Oltpbenchmark
+
+rigi:
+  generate: true
+  output_file: /tmp/rubis.py

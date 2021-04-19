@@ -1,0 +1,21 @@
+analyzer:
+  project_name: Seats
+  project_root: /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/seats/procedures
+  schema_files:
+    - /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/seats/ddls/seats-ddl.sql
+  opt: false
+  additional_class_paths:
+    - /Users/kaima/src/oltpbenchmark/build/
+    - /Users/kaima/src/oltpbenchmark/lib/
+  additional_semantics:
+    - Oltpbenchmark
+
+  patches:
+    unfold_matrix:
+      "com.oltpbenchmark.benchmarks.seats.procedures.UpdateReservation.run":
+        "attr_idx": [0, 1, 2, 3]
+
+
+rigi:
+  generate: true
+  output_file: /tmp/seats.py

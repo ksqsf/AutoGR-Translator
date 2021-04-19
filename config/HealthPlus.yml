@@ -87,4 +87,4 @@ analyzer:
 
 rigi:
   generate: true
-  output_file: /tmp/output.py
+  output_file: /tmp/healthplus.py
