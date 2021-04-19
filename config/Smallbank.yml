@@ -1,0 +1,15 @@
+analyzer:
+  project_name: Smallbank
+  project_root: /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/smallbank/procedures
+  schema_files:
+    - /Users/kaima/src/oltpbenchmark/src/com/oltpbenchmark/benchmarks/smallbank/ddls/smallbank-ddl.sql
+  opt: false
+  additional_class_paths:
+    - /Users/kaima/src/oltpbenchmark/build/
+    - /Users/kaima/src/oltpbenchmark/lib/
+  additional_semantics:
+    - Oltpbenchmark
+
+rigi:
+  generate: true
+  output_file: /tmp/smallbank.py
