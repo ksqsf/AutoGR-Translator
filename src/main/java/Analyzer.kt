@@ -91,7 +91,6 @@ fun main() {
 
     // Start the analyzer
     val analyzer = Analyzer(config)
-    analyzer.graphviz()
 
     // Generate RIGI
     if (config[RigiSpec.generate]) {
@@ -202,6 +201,9 @@ class Analyzer(val cfg: Config) {
         } else {
             nontrivialEffects()
         }
+
+        // Output graphviz if desired
+        graphviz()
 
         // Step 4. Convert paths to effect triples
         for (effectMethodSig in effects) {
