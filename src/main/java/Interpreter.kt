@@ -242,11 +242,19 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 }
                 val args = methodCallExpr.arguments.map { evalExpr(it)!! }
 
-                return if (hasSemantics(methodDecl)) {
-                    dispatchSemantics(methodCallExpr, arg, receiver, args)
+                val qname = methodDecl.qualifiedName
+                return if (hasSemantics(methodDecl.qualifiedName)) {
+                    dispatchSemantics(methodCallExpr, arg, receiver, args, qname)
                 } else {
                     AbstractValue.Call(methodCallExpr, receiver, methodCallExpr.nameAsString, args)
                 }
+            }
+            override fun visit(expr: ObjectCreationExpr, arg: Interpreter): AbstractValue {
+                val qname = expr.type.resolve().qualifiedName
+                if (hasSemantics(qname)) {
+                    return dispatchSemantics(expr, arg, null, expr.arguments.map { evalExpr(it)!! }, qname)
+                }
+                return AbstractValue.Unknown(expr)
             }
 
             override fun visit(conditionalExpr: ConditionalExpr, arg: Interpreter): AbstractValue {
@@ -270,10 +278,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             //
             // The following are expressions currently not supported.
             //
-            override fun visit(expr: ObjectCreationExpr, arg: Interpreter): AbstractValue {
-                println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr)
-            }
             override fun visit(expr: ArrayAccessExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
                 return AbstractValue.Unknown(expr)

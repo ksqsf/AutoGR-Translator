@@ -108,12 +108,12 @@ val knownSemantics = mutableMapOf(
     "java.lang.Integer.toString" to ::integerToStringSemantics,
 )
 
-fun hasSemantics(methodDecl: ResolvedMethodDeclaration): Boolean {
-    return knownSemantics.containsKey(methodDecl.qualifiedName)
+fun hasSemantics(methodDecl: QualifiedName): Boolean {
+    return knownSemantics.containsKey(methodDecl)
 }
 
-fun dispatchSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
-    return knownSemantics[self.asMethodCallExpr().resolve().qualifiedName]!!(self, env, receiver, args)
+fun dispatchSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>, qname: QualifiedName): AbstractValue {
+    return knownSemantics[qname]!!(self, env, receiver, args)
 }
 
 fun parseIntSemantics(self: Expression, env: Interpreter, receiver: AbstractValue?, args: List<AbstractValue>): AbstractValue {
