@@ -275,6 +275,23 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 return expr.inner.accept(this, arg)!!
             }
 
+            // Object
+            override fun visit(expr: FieldAccessExpr, arg: Interpreter): AbstractValue {
+                // If this refers to a static constant, we can directly get its value from the compiled class file.
+                val decl = expr.resolve()
+                if (decl.isField) {
+                    val field = decl.asField()
+                    if (field.isStatic && expr.scope.isNameExpr) {
+                        val scope = expr.scope.asNameExpr()
+                        val className = scope.calculateResolvedType().asReferenceType().qualifiedName
+                        return getStaticFieldByReflection(className, expr.nameAsString, expr)
+                    }
+                }
+                // Otherwise, we know nothing about it.
+                println("[WARN] unknown ${expr::class}: $expr")
+                return AbstractValue.Unknown(expr)
+            }
+
             //
             // The following are expressions currently not supported.
             //
@@ -322,9 +339,13 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 println("[WARN] unknown ${expr::class}: $expr")
                 return AbstractValue.Unknown(expr)
             }
-            override fun visit(fieldAccessExpr: FieldAccessExpr, arg: Interpreter): AbstractValue {
-                println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr)
+
+            // Helper functions
+            fun getStaticFieldByReflection(className: String, fieldName: String, expr: Expression?): AbstractValue {
+                val klass = Class.forName(className, true, effect.analyzer.classLoader)
+                val field = klass.getField(fieldName)
+                val value = field.get(null)
+                return AbstractValue.Data(expr, value)
             }
         }, this)
         // println("[DBG] Eval $expr = $result")
@@ -350,9 +371,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             override fun visit(stmt: ExplicitConstructorInvocationStmt, arg: Void?) {
                 println("[WARN] can't handle ${stmt::class}: $stmt")
             }
-            override fun visit(stmt: ForEachStmt, arg: Void?) {
-                println("[WARN] can't handle ${stmt::class}: $stmt")
-            }
             override fun visit(stmt: LabeledStmt, arg: Void?) {
                 println("[WARN] can't handle ${stmt::class}: $stmt")
             }
@@ -360,9 +378,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 println("[WARN] can't handle ${stmt::class}: $stmt")
             }
             override fun visit(stmt: LocalClassDeclarationStmt, arg: Void?) {
-                println("[WARN] can't handle ${stmt::class}: $stmt")
-            }
-            override fun visit(stmt: SwitchStmt, arg: Void?) {
                 println("[WARN] can't handle ${stmt::class}: $stmt")
             }
             override fun visit(stmt: YieldStmt, arg: Void?) {
@@ -421,8 +436,6 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             }
 
             override fun visit(d: VariableDeclarator, arg: Interpreter) {
-                println("[DBG] Class field: $d")
-
                 val varName = d.nameAsString
                 val init = d.initializer
                 if (init.isEmpty) {
@@ -430,6 +443,7 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
                 } else {
                     putVariable(varName, evalExpr(init.get())!!)
                 }
+                println("[DBG] Class field: $varName = ${lookup(varName)?.get()}")
             }
         }, this)
     }
