@@ -32,6 +32,8 @@ import java.nio.file.Paths
 
 typealias IntraGraphSet = MutableMap<QualifiedName, IntraGraph>
 typealias QualifiedName = String
+typealias Ident = String
+typealias Repr = String
 
 object AnalyzerSpec : ConfigSpec() {
     val projectName by required<String>()
@@ -61,7 +63,8 @@ object AnalyzerSpec : ConfigSpec() {
     }
 
     object Patches: ConfigSpec() {
-        val argTypes by optional(mapOf<String, Map<String, String>>())
+        val unfoldMatrix by optional(mapOf<QualifiedName, Map<Ident, List<Repr>>>())
+        val argTypes by optional(mapOf<QualifiedName, Map<Ident, Repr>>())
     }
 }
 
@@ -81,7 +84,7 @@ fun main() {
     basicUpdates += config[AnalyzerSpec.additionalBasicUpdates]
 
     // Register additional semantics.
-    // For each additional semantics X, call `appSemantics.XSemanticsKt.register()`.
+    // For each additional semantics X, call `appSemantics.XSemantics.register()`.
     for (semantics in config[AnalyzerSpec.additionalSemantics]) {
         val semanticsClass = Class.forName("appSemantics.${semantics}Semantics")
         val semanticsObj = semanticsClass.getDeclaredConstructor().newInstance()
@@ -106,7 +109,7 @@ class Analyzer(val cfg: Config) {
     val schema = Schema()
     val effectMap = mutableMapOf<QualifiedName, MutableSet<Effect>>()
 
-    private val classLoader: URLClassLoader
+    val classLoader: URLClassLoader
 
     init {
         // Create a custom ClassLoader that considers additional_class_paths
@@ -214,17 +217,66 @@ class Analyzer(val cfg: Config) {
                 println("* No intragraph found for $effectMethodSig")
                 continue
             }
-            println("* Effectual method $effectMethodSig")
+            val len = effectMethodSig.length
+            println("###" + "#".repeat(len) + "###")
+            println("## $effectMethodSig ##")
+            println("###" + "#".repeat(len) + "###")
             val es = g.collectEffectPaths()
-            for ((_, pathSet) in es) {
-                for (path in pathSet) {
-                    val effect = Effect(this, path)
-                    effect.tryToAnalyze()
-                    effectMap.putIfAbsent(effectMethodSig, mutableSetOf())
-                    effectMap[effectMethodSig]!!.add(effect)
+            for (unfoldArgs in getUnfoldArgs(effectMethodSig)) {
+                println("~~~ $unfoldArgs")
+                for ((_, pathSet) in es) {
+                    for (path in pathSet) {
+                        val effect = Effect(this, path)
+                        try {
+                            effect.tryToAnalyze(unfoldArgs)
+                        } catch (e: AbandonEffect) {
+                            continue
+                        }
+                        effectMap.putIfAbsent(effectMethodSig, mutableSetOf())
+                        effectMap[effectMethodSig]!!.add(effect)
+                    }
                 }
             }
         }
+    }
+
+    /**
+     * Construct unfold arguments for each method sig. If unfold info not supplied, [{}] is returned.
+     * The method will be analyzed for len(returned_list) times, each with the supplied arguments.
+     *
+     * @return List<Dict<argName, repr(argValue)>>
+     */
+    private fun getUnfoldArgs(methodSig: QualifiedName): List<Map<String, String>> {
+        var tmp: Map<String, List<String>>? = null
+        for ((m, v) in cfg[AnalyzerSpec.Patches.unfoldMatrix]) {
+            if (methodSig.startsWith(m, ignoreCase = true)) {
+                tmp = v
+                break
+            }
+        }
+        if (tmp == null)
+            return listOf(emptyMap())
+
+        // Slow path
+        val matrix = tmp.toList()
+        val keys = matrix.map { it.first }
+        val values = matrix.map { it.second }
+        val nKeys = matrix.size
+        val ans = mutableListOf<Map<String,String>>()
+        fun traverse(cur: Int, path: MutableList<String>) {
+            if (cur >= nKeys) {
+                ans.add(keys.zip(path).toMap())
+                return
+            }
+            for (value in values[cur]) {
+                path.add(value)
+                traverse(cur+1, path)
+                path.removeLast()
+            }
+        }
+        traverse(0, mutableListOf())
+        println("unfold:::: $ans")
+        return ans
     }
 
     fun graphviz() {
@@ -239,7 +291,7 @@ class Analyzer(val cfg: Config) {
         println("Visualizing intragraph...")
 
         val cnt = mutableMapOf<QualifiedName, Int>()
-        val normalize = { str: String -> quote(str).takeWhile { it != '(' } }
+        // val normalize = { str: String -> quote(str).takeWhile { it != '(' } }
         val subprocesses = mutableListOf<Process>()
         for ((qn, g) in intragraphs) {
             if (excludes(qn))

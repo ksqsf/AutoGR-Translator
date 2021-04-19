@@ -1,3 +1,6 @@
+import com.uchuhimo.konf.toCamelCase
+import java.lang.Exception
+
 // Each IntraPath corresponds to an "effect".
 //
 // An effect is represented as (argv, cond, side effect).
@@ -57,7 +60,12 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
         next.add(effect)
     }
 
-    private fun introduceParameters() {
+    /**
+     * Introduce free variables into the scope for function arguments.
+     *
+     * @param unfoldArgs arguments in this map is not free, and has the supplied value.
+     */
+    private fun introduceParameters(unfoldArgs: Map<String, String>) {
         // Workaround: Config-specified types takes precedence. This is needed when inferred types are wrong, or
         // there's strange type conversion we don't yet support.
         val curMethodName = sourcePath.intragraph.qualifiedName
@@ -70,6 +78,23 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
 
         for (arg in sourcePath.intragraph.methodDecl.parameters) {
             val name = arg.name.asString()
+            val camel = name.toCamelCase()
+
+            // Check if the parameter is in the unfold matrix.
+            if (camel in unfoldArgs) {
+                val longVal = unfoldArgs[camel]!!.toLongOrNull()
+                if (longVal != null) {
+                    val value = AbstractValue.Data(null, longVal)
+                    interpreter.putVariable(name, value)
+                    println("!!! unfold : $name = $value")
+                    // This parameter is processed, continue to the next
+                    continue
+                } else {
+                    println("[WARN] Currently we only support integers in unfold matrix")
+                }
+            }
+
+            // Normal case: parameters are free variables.
             val tyStr = patchedTypes[name] ?: arg.typeAsString.toLowerCase()
             val ty = if (tyStr.contains("string")) {
                 Type.String
@@ -91,20 +116,23 @@ class Effect(val analyzer: Analyzer, val sourcePath: IntraPath) {
     /**
      * Initialize this effect by running the interpreter on the corresponding intrapath.
      */
-    fun tryToAnalyze() {
+    fun tryToAnalyze(unfoldArgs: Map<String, String>) {
 
         // sourcePath is a known effectual path.
         // 1. Build fields in the static class
         interpreter.runClass(sourcePath.intragraph.classDef)
 
-        // 2. All parameters are declared free.
-        introduceParameters()
+        // 2. All parameters are declared free, or they have a supplied value.
+        introduceParameters(unfoldArgs)
 
         // 3. Eval this path, and build an easier representation of its effect.
         interpreter.run(sourcePath)
 
     }
 
+    /**
+     * Merge another effect into this effect.
+     */
     fun add(rhs: Effect) {
         for ((name, type) in rhs.argv) {
             addArgv(name, type)
