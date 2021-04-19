@@ -499,7 +499,7 @@ class IntraGraph(val classDef: ClassOrInterfaceDeclaration, val methodDecl: Meth
                 return 0
             }
             var total = 0
-            for (edge in rgraph[cur]!!) {
+            for (edge in rgraph[cur] ?: emptySet()) {
                 path.add(edge)
                 val nextLoop = loops.findBase(edge.next)
                 if (nextLoop == null || nextLoop == effectLoop || nextLoop == edge.next) {
