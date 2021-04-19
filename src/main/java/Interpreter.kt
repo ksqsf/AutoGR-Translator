@@ -293,25 +293,51 @@ class Interpreter(val g: IntraGraph, val schema: Schema, val effect: Effect) {
             }
 
             //
-            // The following are expressions currently not supported.
+            // Array
             //
             override fun visit(expr: ArrayAccessExpr, arg: Interpreter): AbstractValue {
-                println("[WARN] unknown ${expr::class}: $expr")
+                val array = evalExpr(expr.name)!!
+                val idx = evalExpr(expr.index)!!
+                if (array is AbstractValue.Array && idx is AbstractValue.Data && (idx.data is Long || idx.data is Int)) {
+                    val i = if (idx.data is Long) idx.data.toInt() else idx.data as Int
+                    return array[i] ?: AbstractValue.Unknown(expr)
+                }
+                println("[WARN] unknown array access: $expr")
                 return AbstractValue.Unknown(expr)
             }
             override fun visit(expr: ArrayInitializerExpr, arg: Interpreter): AbstractValue {
-                println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr)
+                val values = expr.values.map { evalExpr(it)!! }
+                val array = AbstractValue.Array(expr)
+                for ((i, v) in values.withIndex()) {
+                    array[i] = v
+                }
+                return array
             }
             override fun visit(expr: ArrayCreationExpr, arg: Interpreter): AbstractValue {
-                println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr)
+                return if (expr.initializer.isPresent) {
+                    visit(expr.initializer.get(), arg)
+                } else {
+                    AbstractValue.Array(expr)
+                }
             }
-            override fun visit(expr: LambdaExpr, arg: Interpreter): AbstractValue {
-                println("[WARN] unknown ${expr::class}: $expr")
-                return AbstractValue.Unknown(expr)
-            }
+
+            //
+            // Type related
+            //
             override fun visit(expr: CastExpr, arg: Interpreter): AbstractValue {
+                val ty = expr.type
+                return if (ty.isPrimitiveType)
+                    evalExpr(expr.expression)!!
+                else {
+                    println("[WARN] unknown cast expr: $expr")
+                    AbstractValue.Unknown(expr)
+                }
+            }
+
+            //
+            // The following are expressions currently not supported.
+            //
+            override fun visit(expr: LambdaExpr, arg: Interpreter): AbstractValue {
                 println("[WARN] unknown ${expr::class}: $expr")
                 return AbstractValue.Unknown(expr)
             }

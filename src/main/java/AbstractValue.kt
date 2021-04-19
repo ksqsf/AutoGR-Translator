@@ -370,6 +370,19 @@ open class AbstractValue(val expr: Expression?) {
         }
     }
 
+    // Conservative 1D array type. Only supports constant index.
+    data class Array(
+        val e: Expression?
+    ): AbstractValue(e) {
+        val values = mutableMapOf<Int, AbstractValue>()
+        operator fun get(idx: Int): AbstractValue? {
+            return values[idx]
+        }
+        operator fun set(idx: Int, value: AbstractValue) {
+            values[idx] = value
+        }
+    }
+
     // Variable names that occur free
     data class Free(
         val e: Expression?,
