@@ -101,7 +101,7 @@ class Column(val def: ColumnDefinition, val table: Table) {
         val raw = def.colDataType.dataType.toLowerCase()
         return if (raw.startsWith("varchar") || raw.startsWith("char")) {
             Type.String
-        } else if (raw.startsWith("int") || raw.startsWith("tinyint")) {
+        } else if (raw.startsWith("int") || raw.startsWith("tinyint") || raw.startsWith("bigint")) {
             Type.Int
         } else if (raw.startsWith("double") || raw.startsWith("float")) {
             Type.Real
