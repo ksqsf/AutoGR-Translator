@@ -6,7 +6,7 @@ analyzer:
   graphviz:
     intergraph:
       output: true
-      onlyEffect: false
+      onlyEffect: true
     intragraph:
       output: true
   debug:
